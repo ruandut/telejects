@@ -3,9 +3,11 @@
  * mutation hooks on `api()`.
  */
 import { useAuth } from "@/stores/auth";
+import { useRealm } from "@/stores/realm";
 
 import { refreshAccessToken } from "./auth";
 import { ApiError } from "./errors";
+import { queryClient } from "./query-client";
 
 async function authedFetch(path: string, init: RequestInit): Promise<Response> {
   const send = (token: string | null) => {
@@ -14,6 +16,9 @@ async function authedFetch(path: string, init: RequestInit): Promise<Response> {
     if (!headers.has("Content-Type") && !(init.body instanceof FormData))
       headers.set("Content-Type", "application/json");
     if (token) headers.set("Authorization", `Bearer ${token}`);
+    // Every request names the company this tab works in; the server refuses ones we aren't in.
+    const { realmId } = useRealm.getState();
+    if (realmId !== null && !headers.has("X-Realm")) headers.set("X-Realm", String(realmId));
     return fetch(path, { ...init, headers });
   };
 
@@ -26,10 +31,19 @@ async function authedFetch(path: string, init: RequestInit): Promise<Response> {
     useAuth.getState().clear();
     window.location.assign("/login");
   }
+  if (res.status === 403) {
+    // Removed from this company, or it's gone: /me works out where to go instead.
+    const body = (await res
+      .clone()
+      .json()
+      .catch(() => null)) as { code?: string } | null;
+    if (body?.code === "not_member" || body?.code === "no_realm")
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+  }
   return res;
 }
 
-/** fetch() for /api/* with the JWT attached and one transparent refresh on 401. */
+/** fetch() for /api/* with the JWT and company attached and one transparent refresh on 401. */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await authedFetch(path, init);
   const body: unknown = res.status === 204 ? null : await res.json().catch(() => null);
@@ -37,7 +51,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-/** For the few routes that work before sign-in. Sends no token. */
+/** For the few routes that work before sign-in. Sends no token and no company. */
 export async function publicApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");

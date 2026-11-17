@@ -36,6 +36,16 @@ make web
 make worker
 ```
 
+`make seed` makes that sign-in the Admin of a first company, "Telejects Demo". Platform staff add
+a real company, and invite its first Admin, with:
+
+```bash
+cd backend && uv run python manage.py create_company "Company name" admin@their-domain.example
+```
+
+Invitation emails are sent by the worker; without a mail server in `.env` they are printed to its
+log, link included.
+
 The ports are fixed, and offset from eden-tracker's so both can run at once. `make api` and
 `make web` take their port over from whatever still holds it, and `make worker` replaces an
 earlier worker. `make stop` stops all three.
@@ -57,6 +67,13 @@ make test
 ```bash
 make check
 ```
+
+## Multi-tenancy
+
+Every row belongs to a company (a realm) and every request works inside one company the user is
+an active member of. Querysets refuse to run unscoped, and
+`backend/apps/realms/test_isolation.py` proves isolation per endpoint and fails when a new route,
+model or cross-company query skips the pattern.
 
 ## Secrets
 

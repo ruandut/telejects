@@ -8,6 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -36,7 +37,9 @@ INSTALLED_APPS = [
     # listed in apps/core/test_architecture.py.
     "apps.core",
     "apps.accounts",
+    "apps.realms",
     "apps.jobs",
+    "apps.users",
     # Domain apps go below, one per concern.
 ]
 
@@ -102,10 +105,14 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    # Signed in by default. An endpoint that works before sign-in sets AllowAny itself and is
-    # listed in apps/core/test_access.py.
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
+    # InRealm resolves the request's company and refuses non-members (apps/realms/permissions.py).
+    # An endpoint that works across companies, or before sign-in, sets its own permission
+    # classes and is listed in apps/realms/test_isolation.py.
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+        "apps.realms.permissions.InRealm",
+    ],
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "invitation": "20/min"},
     "COERCE_DECIMAL_TO_STRING": False,
 }
 
@@ -117,6 +124,7 @@ SIMPLE_JWT = {
 
 # The Vite dev server proxies /api, so CORS only matters if you hit Django directly.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5184"])
+CORS_ALLOW_HEADERS = (*default_headers, "x-realm")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # --- Email -----------------------------------------------------------------

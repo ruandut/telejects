@@ -8,7 +8,11 @@ CLAUDE.md applies too.
 - Feature-based. `src/features/<feature>/` holds that feature's `api.ts` (query and mutation
   hooks), components and types.
 - `src/network/` is the only place that calls `fetch` (or opens a `WebSocket`): it attaches the
-  JWT, refreshes once on 401 and raises `ApiError`. Features never call `fetch`.
+  JWT and `X-Realm`, refreshes once on 401 and raises `ApiError`. Features never call `fetch`.
+- Change company only through `enterRealm()` (`src/features/realms/realm-gate.tsx`), which drops
+  the old company's cached data. Signed-in screens render inside `RealmGate`.
+- Show and hide things with `usePermission(code)` (`src/features/realms/permissions.ts`), never
+  by a role's name or key. The server checks every request itself; the UI only follows.
 - `src/routes/` holds thin route files that compose feature components. Signed-in screens live
   under `src/routes/_app/`, one folder per screen. `src/routeTree.gen.ts` is generated.
 - `src/stores/` holds Zustand stores (tokens only in `auth.ts`; who the user is comes from

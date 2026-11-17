@@ -9,13 +9,14 @@ def _sign_in(email, password):
     )
 
 
-def test_sign_in_returns_tokens_that_work(user):
+def test_sign_in_returns_tokens_that_work(user, realm):
     res = _sign_in(user.email, TEST_PASSWORD)
     assert res.status_code == 200
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.json()['access']}")
     me = client.get("/api/auth/me/").json()
-    assert me == {"id": user.id, "email": user.email, "name": user.email}
+    assert me["email"] == user.email
+    assert me["realm"]["id"] == realm.id
 
 
 def test_sign_in_ignores_email_capitalisation(user):

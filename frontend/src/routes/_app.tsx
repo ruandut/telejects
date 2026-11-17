@@ -5,9 +5,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Wordmark } from "@/components/wordmark";
+import { RealmGate } from "@/features/realms/realm-gate";
 import { isLoggedIn } from "@/stores/auth";
 
-// Pathless layout: every signed-in screen renders beside the sidebar (a drawer on a phone).
+// Pathless layout: every signed-in screen renders beside the sidebar (a drawer on a phone),
+// inside the tab's company.
 export const Route = createFileRoute("/_app")({
   beforeLoad: () => {
     if (!isLoggedIn()) throw redirect({ to: "/login" });
@@ -35,7 +37,9 @@ function AppLayout() {
           <div className="flex-1" />
           <ThemeToggle />
         </header>
-        <Outlet />
+        <RealmGate>
+          <Outlet />
+        </RealmGate>
       </SidebarInset>
     </SidebarProvider>
   );

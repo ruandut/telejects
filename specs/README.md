@@ -8,7 +8,7 @@ Every feature starts as one file here: `NNNN-short-name.md`, copied from
 `Draft` → `Approved` → `In progress` → `Done`
 
 A spec is Done when every scenario has a passing test named `test_at_<spec>_<nn>_<what>`, every
-new endpoint is covered by the access tests, and `make test` and `make check` pass.
+new endpoint has its company-isolation tests, and `make test` and `make check` pass.
 
 ## Writing good scenarios
 
@@ -22,3 +22,4 @@ new endpoint is covered by the access tests, and `make test` and `make check` pa
 
 | Spec | Title | Status |
 |---|---|---|
+| [0001](0001-user-management.md) | Companies and user management | Done |

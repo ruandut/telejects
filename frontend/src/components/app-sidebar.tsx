@@ -1,5 +1,5 @@
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDown, LayoutDashboard, LogOut, type LucideIcon } from "lucide-react";
+import { ChevronsUpDown, LayoutDashboard, LogOut, Users, type LucideIcon } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -22,12 +22,23 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Mark } from "@/components/wordmark";
 import { signOut, useMe } from "@/features/auth/api";
+import type { Permission } from "@/features/auth/types";
+import { RealmSwitcher } from "@/features/realms/realm-switcher";
 
-type NavItem = { to: string; label: string; icon: LucideIcon; exact?: boolean };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+  /** Shown only to people with this permission in the tab's company. */
+  needs?: Permission;
+};
 
-const NAV: NavItem[] = [{ to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true }];
+const NAV: NavItem[] = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/users", label: "User management", icon: Users, needs: "users.view" },
+];
 
 /** On a phone the sidebar is a drawer over the page, so choosing something should dismiss it. */
 function useCloseOnMobile() {
@@ -40,26 +51,19 @@ function useCloseOnMobile() {
 export function AppSidebar() {
   const matchRoute = useMatchRoute();
   const closeOnMobile = useCloseOnMobile();
+  const permissions = useMe().data?.realm?.permissions ?? [];
+  const shown = NAV.filter((item) => !item.needs || permissions.includes(item.needs));
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg" tooltip="Telejects">
-              <Link to="/" onClick={closeOnMobile}>
-                <Mark aria-hidden className="size-8 shrink-0 text-sidebar-primary" />
-                <span className="truncate font-semibold">Telejects</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <RealmSwitcher onNavigate={closeOnMobile} />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV.map((item) => (
+              {shown.map((item) => (
                 <SidebarMenuItem key={item.to}>
                   <SidebarMenuButton
                     asChild

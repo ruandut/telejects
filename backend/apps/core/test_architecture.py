@@ -11,8 +11,10 @@ APPS_DIR = Path(__file__).resolve().parent.parent
 # app -> the other apps it may import. Platform apps never import domain apps.
 ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "core": set(),
+    "realms": {"core"},
     "jobs": {"core"},
-    "accounts": {"core", "jobs"},
+    "accounts": {"core", "realms", "jobs"},
+    "users": {"core", "accounts", "realms", "jobs"},
 }
 
 
