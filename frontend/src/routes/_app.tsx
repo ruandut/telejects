@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useMatchRoute } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -18,6 +18,9 @@ export const Route = createFileRoute("/_app")({
 });
 
 function AppLayout() {
+  // My settings is about the person, not a company, so it works in none (0002).
+  const personal = !!useMatchRoute()({ to: "/account", fuzzy: true });
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -37,9 +40,13 @@ function AppLayout() {
           <div className="flex-1" />
           <ThemeToggle />
         </header>
-        <RealmGate>
+        {personal ? (
           <Outlet />
-        </RealmGate>
+        ) : (
+          <RealmGate>
+            <Outlet />
+          </RealmGate>
+        )}
       </SidebarInset>
     </SidebarProvider>
   );

@@ -6,12 +6,13 @@ eden-tracker.
 
 Planned first specs:
 - **0001 User management.**
-- **0002 Integrations**, starting with feasibilities: a recreated and improved version of the
+- **0002 My settings** (changing my password).
+- **0003 Integrations**, starting with feasibilities: a recreated and improved version of the
   feasibilities feature in Rapid (`~/SDXWorkspace/Rapid/connect-rapid`). Network providers (MTN,
   Vodacom, ...) each have their own feasibility API, products and way of querying. The plan is a
   connector layer in the style of primer.io: our side defines what a feasibility needs (a name,
   a lat/lon, the products wanted, ...) and each provider's connector maps its API onto that. The
-  architecture is to be discussed with Ruan before 0002 is written: don't design it alone.
+  architecture is to be discussed with Ruan before 0003 is written: don't design it alone.
 - **Later: client API access.** An Integrations section where a company creates API clients and
   works with a public, versioned API directly, feasibilities first. OAuth2 client credentials
   through django-oauth-toolkit: each API client belongs to a realm, its scopes are our
@@ -101,7 +102,7 @@ companies is the worst bug this system can have.
   paths include the realm id.
 - A websocket admits only an active member of the company it names and only ever says "this
   kind of data changed". It never carries data, so access is decided in one place, the API.
-- Connectors (spec 0002) are no exception: provider credentials, requests and results belong to
+- Connectors (spec 0003) are no exception: provider credentials, requests and results belong to
   a company.
 - **Per-project access is coming** (board-based, like monday.com): a guest from outside, such as
   a customer following their own project, sees only the projects granted to them. Belonging to

@@ -22,7 +22,7 @@ remove them when they leave.
     allowlisted).
   - A **User management** section listing the company's people, their roles and status.
   - Add users with a specific role, change a user's role, edit and remove users.
-  - **Roles** from a fixed list (Admin, Project manager, Field technician, Viewer), each a set of
+  - **Roles** from a fixed list (Admin, Project manager, Viewer), each a set of
     permissions. Access is checked by permission, never by role name, and roles are stored per
     company so a later spec can let companies define their own.
   - A company always has at least one Admin.
@@ -117,7 +117,7 @@ company can never change what another company sees:
   Each later spec adds the codes it needs (`projects.edit`, `feasibilities.run`, ...) and says
   which built-in roles get them. Nothing checks a role's name.
 - **A `Role` is a company's row** (`TenantModel`): `key`, `name`, `is_system`, and a `permissions`
-  list used only by custom roles. Every new company gets the four built-in roles, with
+  list used only by custom roles. Every new company gets the built-in roles, with
   `is_system=True`. A built-in role's permissions are read from the registry in code, not the
   row, so adding a permission to "Project manager" in a later spec reaches every company
   without a data migration.
@@ -127,7 +127,6 @@ company can never change what another company sees:
   |---|---|---|---|
   | Admin | yes | yes | running the company's account; always has every permission |
   | Project manager | yes | no | planning and running projects |
-  | Field technician | no | no | doing the work on site |
   | Viewer | no | no | read-only access |
 
 - **A membership points at one `Role` of the same company**: a foreign key, checked to be in the
@@ -234,8 +233,8 @@ Invented companies: "Northwind Fibre" and "Blue Mast Telecom".
 
 #### AT-0001-02 — An admin adds a user
 - Given I am an admin
-- When I add "Thandi Nkosi" with email "thandi@example.com" as a Field technician
-- Then she appears in the list as a Field technician, "Invited"
+- When I add "Thandi Nkosi" with email "thandi@example.com" as a Viewer
+- Then she appears in the list as a Viewer, "Invited"
 - And an invitation email is sent to "thandi@example.com"
 
 #### AT-0001-03 — The same email can't be added twice
@@ -245,12 +244,12 @@ Invented companies: "Northwind Fibre" and "Blue Mast Telecom".
 - And no email is sent
 
 #### AT-0001-04 — An admin edits a user
-- Given "Thandi Nkosi" is a Field technician
+- Given "Thandi Nkosi" is a Viewer
 - When I change her name to "Thandi Dlamini" and her role to Project manager
 - Then the list shows "Thandi Dlamini" as a Project manager
 
 #### AT-0001-05 — An admin removes a user
-- Given "Thandi Nkosi" is an active Field technician
+- Given "Thandi Nkosi" is an active Viewer
 - When I remove her and confirm
 - Then she is no longer in the list
 - And she can no longer see anything in the company
@@ -262,7 +261,7 @@ Invented companies: "Northwind Fibre" and "Blue Mast Telecom".
 - And adding, editing, removing or changing a role through the API is refused
 
 #### AT-0001-07 — Some roles don't see users at all
-- Given I am a Field technician or a Viewer
+- Given I am a Viewer
 - Then User management isn't in my sidebar
 - And listing users through the API is refused
 
@@ -306,7 +305,7 @@ Invented companies: "Northwind Fibre" and "Blue Mast Telecom".
 
 #### AT-0001-14 — Every company starts with the built-in roles
 - When a company is created
-- Then it has Admin, Project manager, Field technician and Viewer
+- Then it has Admin, Project manager and Viewer
 - And its first user is an Admin
 
 #### AT-0001-15 — I pick a role when adding someone
@@ -316,7 +315,7 @@ Invented companies: "Northwind Fibre" and "Blue Mast Telecom".
 
 #### AT-0001-16 — A changed role takes effect at once
 - Given "Thandi Nkosi" is a Project manager and can see User management
-- When I change her role to Field technician
+- When I change her role to Viewer
 - Then on her next request she can no longer list users
 
 #### AT-0001-17 — Access follows permissions, not role names
@@ -436,10 +435,10 @@ Open until Ruan approves the spec:
    code keeps `realm`.
 2. **Who creates companies.** Drafted: platform staff by command, no self-sign-up yet. Is there a
    platform-staff role in the portal later (seeing all companies), or is Django admin enough?
-3. **Roles.** Decided: a fixed list now, stored per company so custom roles can follow. Still
-   open: are Admin, Project manager, Field technician and Viewer the right four? Should a
-   Project manager be able to add Field technicians (but not Admins)? Drafted: no, only
-   `users.manage` adds people.
+3. **Roles.** Decided: a fixed list now, stored per company so custom roles can follow. Field
+   technician was dropped after 0001 was built (migration `realms/0003` moved its holders to
+   Viewer). Still open: should a Project manager be able to add people (but not Admins)?
+   Drafted: no, only `users.manage` adds people.
 4. **Outside people on one project.** Decided: projects never move between companies, but a
    company can let an outside person (a guest) see one specific project. See "Designed for
    later" above.
@@ -453,7 +452,7 @@ Open until Ruan approves the spec:
 ## Implementation notes
 
 Built as approved, with the decisions as drafted (company in the UI, `realm` in code; companies
-by command; four built-in roles; strict managers; password reset left for later; no mail server
+by command; built-in roles; strict managers; password reset left for later; no mail server
 chosen).
 
 - **Tenancy (`backend/apps/realms/`):** `Realm`, `Role`, `RealmMembership`, `TenantModel`.

@@ -4,13 +4,12 @@ apps/realms/test_isolation.py."""
 from datetime import timedelta
 from io import StringIO
 
-import pytest
 from django.core import mail as outbox
 from django.core.management import call_command
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.realms.access_control import ADMIN
+from apps.realms.access_control import ADMIN, SYSTEM_ROLES
 from apps.realms.models import Realm, RealmMembership, Role
 from apps.realms.services import create_realm
 from apps.users.models import Invitation
@@ -25,7 +24,7 @@ def people(api):
     return {row["email"]: row for row in api.get("/api/users/").json()}
 
 
-def add(api, realm, email="thandi@example.com", name="Thandi Nkosi", role="field_technician"):
+def add(api, realm, email="thandi@example.com", name="Thandi Nkosi", role="viewer"):
     return api.post(
         "/api/users/",
         {"email": email, "name": name, "role": role_id(realm, role)},
@@ -64,7 +63,7 @@ def test_at_0001_02_an_admin_adds_a_user(api, realm):
     row = people(api)["thandi@example.com"]
     assert (row["name"], row["role"]["name"], row["status"]) == (
         "Thandi Nkosi",
-        "Field technician",
+        "Viewer",
         "invited",
     )
     [message] = outbox.outbox
@@ -83,7 +82,7 @@ def test_at_0001_03_the_same_email_cant_be_added_twice(api, realm):
 
 
 def test_at_0001_04_an_admin_edits_a_user(api, realm):
-    thandi = member(realm, "thandi@example.com", "field_technician", name="Thandi Nkosi")
+    thandi = member(realm, "thandi@example.com", "viewer", name="Thandi Nkosi")
     res = api.patch(
         f"/api/users/{thandi.id}/",
         {"name": "Thandi Dlamini", "role": role_id(realm, "project_manager")},
@@ -105,7 +104,7 @@ def test_at_0001_05_an_admin_removes_a_user(api, realm):
 
 def test_at_0001_06_without_the_permission_users_cant_be_managed(realm):
     pm = member(realm, "pm@example.com", "project_manager")
-    other = member(realm, "sam@example.com", "field_technician")
+    other = member(realm, "sam@example.com", "viewer")
     client = client_for(pm.user, realm)
     assert client.get("/api/users/").status_code == 200
     assert client.get(f"/api/users/{other.id}/").status_code == 200
@@ -122,13 +121,12 @@ def test_at_0001_06_without_the_permission_users_cant_be_managed(realm):
     ]
     assert [r.status_code for r in attempts] == [403] * 5
     other.refresh_from_db()
-    assert (other.name, other.role.key, other.status) == ("", "field_technician", "active")
+    assert (other.name, other.role.key, other.status) == ("", "viewer", "active")
     assert outbox.outbox == []
 
 
-@pytest.mark.parametrize("key", ["field_technician", "viewer"])
-def test_at_0001_07_some_roles_dont_see_users_at_all(realm, key):
-    someone = member(realm, f"{key}@example.com", key)
+def test_at_0001_07_some_roles_dont_see_users_at_all(realm):
+    someone = member(realm, "viewer@example.com", "viewer")
     client = client_for(someone.user, realm)
     assert client.get("/api/users/").status_code == 403
     assert client.get("/api/roles/").status_code == 403
@@ -153,7 +151,7 @@ def _me(realm, user):
 
 
 def test_at_0001_09_removing_the_only_admin_hands_the_role_over(api, realm, user):
-    thandi = member(realm, "thandi@example.com", "field_technician")
+    thandi = member(realm, "thandi@example.com", "viewer")
     me = _me(realm, user)
     res = api.delete(f"/api/users/{me.id}/", {"new_admin": thandi.id}, format="json")
     assert res.status_code == 204
@@ -163,7 +161,7 @@ def test_at_0001_09_removing_the_only_admin_hands_the_role_over(api, realm, user
 
 
 def test_at_0001_10_the_only_admin_cant_be_removed_without_a_successor(api, realm, user):
-    member(realm, "thandi@example.com", "field_technician")
+    member(realm, "thandi@example.com", "viewer")
     me = _me(realm, user)
     res = api.delete(f"/api/users/{me.id}/")
     assert res.status_code == 400
@@ -175,7 +173,7 @@ def test_at_0001_10_the_only_admin_cant_be_removed_without_a_successor(api, real
 def test_at_0001_11_the_successor_must_be_an_active_user(api, realm, user):
     add(api, realm, email="sam@example.com")
     sam = people(api)["sam@example.com"]
-    member(realm, "thandi@example.com", "field_technician")
+    member(realm, "thandi@example.com", "viewer")
     me = _me(realm, user)
     res = api.delete(f"/api/users/{me.id}/", {"new_admin": sam["id"]}, format="json")
     assert res.status_code == 400
@@ -208,7 +206,7 @@ def test_at_0001_13_with_another_admin_no_successor_is_needed(api, realm):
 
 def test_at_0001_15_i_pick_a_role_when_adding_someone(api, realm):
     roles = api.get("/api/roles/").json()
-    assert [r["name"] for r in roles] == ["Admin", "Project manager", "Field technician", "Viewer"]
+    assert [r["name"] for r in roles] == ["Admin", "Project manager", "Viewer"]
     assert all(r["description"] for r in roles)
     pm = next(r for r in roles if r["key"] == "project_manager")
     assert [p["code"] for p in pm["permissions"]] == ["users.view"]
@@ -225,7 +223,7 @@ def test_at_0001_16_a_changed_role_takes_effect_at_once(api, realm):
     assert hers.get("/api/users/").status_code == 200
     api.patch(
         f"/api/users/{thandi.id}/",
-        {"role": role_id(realm, "field_technician")},
+        {"role": role_id(realm, "viewer")},
         format="json",
     )
     assert hers.get("/api/users/").status_code == 403
@@ -392,7 +390,7 @@ def test_at_0001_28_platform_staff_add_a_company(db):
     out = StringIO()
     call_command("create_company", "Northwind Fibre", "Boss@Example.com", stdout=out)
     realm = Realm.objects.get(name="Northwind Fibre")
-    assert Role.objects.in_realm(realm).count() == 4
+    assert Role.objects.in_realm(realm).count() == len(SYSTEM_ROLES)
     admin = RealmMembership.objects.in_realm(realm).get()
     assert admin.user.email == "boss@example.com"
     assert admin.is_admin and admin.status == "invited"

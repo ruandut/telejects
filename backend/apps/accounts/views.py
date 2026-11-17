@@ -1,15 +1,17 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.realms.access_control import PERMISSIONS
 from apps.realms.models import RealmMembership
 from apps.realms.permissions import resolve_membership
 
-from .serializers import EmailTokenObtainPairSerializer
+from . import services
+from .serializers import EmailTokenObtainPairSerializer, PasswordChangeSerializer
 
 
 class SignInView(TokenObtainPairView):
@@ -53,3 +55,25 @@ def _current(membership) -> dict:
         "role": {"id": role.id, "key": role.key, "name": role.name},
         "permissions": sorted(code for code in PERMISSIONS if membership.has_perm(code)),
     }
+
+
+class PasswordThrottle(UserRateThrottle):
+    """Per person, at the "password" rate."""
+
+    scope = "password"
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([PasswordThrottle])
+def change_password(request):
+    """Change my own password with my current one (0002). Names no user, so it can only ever be
+    mine. Throttled like sign-in, so it can't be used to guess. Other browsers are signed out;
+    this one gets fresh tokens and stays signed in."""
+    data = PasswordChangeSerializer(data=request.data)
+    data.is_valid(raise_exception=True)
+    services.change_password(
+        request.user, data.validated_data["current_password"], data.validated_data["new_password"]
+    )
+    refresh = RefreshToken.for_user(request.user)
+    return Response({"access": str(refresh.access_token), "refresh": str(refresh)})

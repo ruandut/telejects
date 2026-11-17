@@ -23,3 +23,4 @@ new endpoint has its company-isolation tests, and `make test` and `make check` p
 | Spec | Title | Status |
 |---|---|---|
 | [0001](0001-user-management.md) | Companies and user management | Done |
+| [0002](0002-my-settings.md) | My settings: changing my password | Done |

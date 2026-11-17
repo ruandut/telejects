@@ -208,8 +208,8 @@ def test_an_invitation_link_only_opens_its_own_company(api, realm, blue):
 
 
 def test_permission_limits_hold_for_roles(realm):
-    tech = member(realm, "tech@example.com", "field_technician")
-    assert client_for(tech.user, realm).get("/api/roles/").status_code == 403
+    viewer = member(realm, "viewer@example.com", "viewer")
+    assert client_for(viewer.user, realm).get("/api/roles/").status_code == 403
     pm = member(realm, "pm@example.com", "project_manager")
     assert client_for(pm.user, realm).get("/api/roles/").status_code == 200
 
@@ -225,7 +225,15 @@ def test_roles_are_read_only(api, realm):
 
 
 @pytest.mark.parametrize(
-    "path", ["/api/auth/me/", "/api/users/", "/api/users/1/", "/api/roles/", "/api/roles/1/"]
+    "path",
+    [
+        "/api/auth/me/",
+        "/api/auth/password/",
+        "/api/users/",
+        "/api/users/1/",
+        "/api/roles/",
+        "/api/roles/1/",
+    ],
 )
 def test_signed_out_requests_are_refused(db, path):
     assert APIClient().get(path).status_code == 401
@@ -240,6 +248,7 @@ NOT_REALM_GATED = {
     "token_obtain_pair": "sign-in happens before there is a user",
     "token_refresh": "exchanges the user's own refresh token",
     "me": "the user's own identity and memberships; resolves the company itself",
+    "password": "changes only the signed-in person's own password, whichever company (0002)",
     "user-invitation": "confirming an account by emailed link, before there is a password; "
     "tells the token's holder only the company name and their own address",
 }

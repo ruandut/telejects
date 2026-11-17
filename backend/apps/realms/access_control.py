@@ -34,7 +34,6 @@ SYSTEM_ROLES: dict[str, SystemRole] = {
         "Plans and runs projects. Can see the company's users.",
         frozenset({"users.view"}),
     ),
-    "field_technician": SystemRole("Field technician", "Does the work on site."),
     "viewer": SystemRole("Viewer", "Read-only access."),
 }
 

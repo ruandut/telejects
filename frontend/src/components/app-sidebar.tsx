@@ -1,5 +1,12 @@
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDown, LayoutDashboard, LogOut, Users, type LucideIcon } from "lucide-react";
+import {
+  ChevronsUpDown,
+  LayoutDashboard,
+  LogOut,
+  UserCog,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
   DropdownMenu,
@@ -119,6 +126,14 @@ function UserMenu() {
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                closeOnMobile();
+                void navigate({ to: "/account" });
+              }}
+            >
+              <UserCog /> My settings
+            </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
                 closeOnMobile();

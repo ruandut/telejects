@@ -97,7 +97,6 @@ def test_at_0001_14_every_company_starts_with_the_built_in_roles(db):
     assert [r.name for r in roles] == [
         "Admin",
         "Project manager",
-        "Field technician",
         "Viewer",
     ]
     assert all(r.is_system for r in roles)
@@ -114,7 +113,6 @@ def test_admin_always_has_every_permission(realm, monkeypatch):
     "key,expected",
     [
         ("project_manager", {"users.view"}),
-        ("field_technician", set()),
         ("viewer", set()),
     ],
 )
@@ -123,15 +121,13 @@ def test_built_in_role_permissions(realm, key, expected):
 
 
 def test_at_0001_17_access_follows_permissions_not_role_names(realm, monkeypatch):
-    tech = member(realm, "tech@example.com", "field_technician").user
-    client = client_for(tech, realm)
+    viewer = member(realm, "viewer@example.com", "viewer").user
+    client = client_for(viewer, realm)
     assert client.get("/api/users/").status_code == 403
 
     # A built-in role gains users.view in code. Nothing in the database changes.
-    widened = access_control.SystemRole(
-        "Field technician", "Does the work on site.", frozenset({"users.view"})
-    )
-    monkeypatch.setitem(SYSTEM_ROLES, "field_technician", widened)
+    widened = access_control.SystemRole("Viewer", "Read-only access.", frozenset({"users.view"}))
+    monkeypatch.setitem(SYSTEM_ROLES, "viewer", widened)
     assert client.get("/api/users/").status_code == 200
 
 

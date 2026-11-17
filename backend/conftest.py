@@ -20,7 +20,7 @@ def make_user(email: str):
     return get_user_model().objects.create_user(email=email, password=TEST_PASSWORD)
 
 
-def member(realm, email: str, role_key: str = "field_technician", name: str = ""):
+def member(realm, email: str, role_key: str = "viewer", name: str = ""):
     """An active user of `realm` with that built-in role (an existing account is reused)."""
     users = get_user_model().objects
     user = users.filter(email=email).first() or make_user(email)
@@ -46,11 +46,17 @@ def sent_token(to: str) -> str:
 
 @pytest.fixture(autouse=True)
 def _mail_sent_inline(monkeypatch):
-    """Invitation emails go straight to Django's test outbox instead of through Hatchet."""
+    """Emails go straight to Django's test outbox instead of through Hatchet."""
+    from apps.accounts import mail as account_mail
+    from apps.accounts import services as account_services
     from apps.users import mail, services
 
     monkeypatch.setattr(services, "_after_commit", lambda func: func())
     monkeypatch.setattr(mail, "enqueue_invitation", mail.deliver_invitation)
+    monkeypatch.setattr(account_services, "_after_commit", lambda func: func())
+    monkeypatch.setattr(
+        account_services, "enqueue_password_changed", account_mail.deliver_password_changed
+    )
 
 
 @pytest.fixture(autouse=True)

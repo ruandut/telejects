@@ -112,7 +112,8 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
         "apps.realms.permissions.InRealm",
     ],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "invitation": "20/min"},
+    # "password": changing my own password (0002), which checks the current one.
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "invitation": "20/min", "password": "10/min"},
     "COERCE_DECIMAL_TO_STRING": False,
 }
 
@@ -120,6 +121,10 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
+    # Tokens carry a hash of the password, so changing it signs out every other browser (0002).
+    # Refresh checks it too (accounts.serializers); a future websocket must as well.
+    "CHECK_REVOKE_TOKEN": True,
+    "TOKEN_REFRESH_SERIALIZER": "apps.accounts.serializers.RevocableTokenRefreshSerializer",
 }
 
 # The Vite dev server proxies /api, so CORS only matters if you hit Django directly.
