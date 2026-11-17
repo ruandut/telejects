@@ -55,8 +55,32 @@ earlier worker. `make stop` stops all three.
 | App | http://localhost:5184 |
 | API | http://localhost:8010/api/ |
 | Django admin | http://localhost:8010/admin/ |
-| Hatchet dashboard | http://localhost:8892 |
+| Hatchet dashboard | http://localhost:8892 (sign in with `HATCHET_ADMIN_EMAIL` / `HATCHET_ADMIN_PASSWORD` in `.env`) |
 | Postgres | localhost:5436 |
+
+### Resetting Hatchet
+
+Hatchet creates its dashboard admin from `.env` the first time its data is set up, so a changed
+`HATCHET_ADMIN_PASSWORD` only applies after a reset. This wipes Hatchet's run history, not the
+app's data:
+
+```bash
+docker compose rm -sf hatchet
+```
+
+```bash
+docker compose exec postgres psql -U telejects -d telejects -c "DROP DATABASE hatchet WITH (FORCE);" -c "CREATE DATABASE hatchet;"
+```
+
+```bash
+docker volume rm telejects_hatchet_config
+```
+
+```bash
+make up hatchet-token
+```
+
+Then restart `make api` and `make worker`, so they pick up the new token.
 
 ## Checks
 

@@ -47,6 +47,10 @@ services:
       SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: localhost:7077
       SERVER_URL: http://localhost:8892
       SERVER_DEFAULT_ENGINE_VERSION: V1
+      # The dashboard's admin, created when Hatchet's data is first set up. From .env.
+      ADMIN_EMAIL: ${HATCHET_ADMIN_EMAIL:?run make setup to create .env}
+      ADMIN_PASSWORD: ${HATCHET_ADMIN_PASSWORD:?run make setup to create .env}
+      ADMIN_NAME: Admin
     volumes:
       - hatchet_config:/config
 
