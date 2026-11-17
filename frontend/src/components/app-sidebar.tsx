@@ -2,6 +2,8 @@ import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import {
   ChevronsUpDown,
   LayoutDashboard,
+  MapPinned,
+  Plug,
   LogOut,
   UserCog,
   Users,
@@ -44,6 +46,8 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/feasibilities", label: "Feasibilities", icon: MapPinned, needs: "feasibilities.view" },
+  { to: "/integrations", label: "Integrations", icon: Plug, needs: "integrations.view" },
   { to: "/users", label: "User management", icon: Users, needs: "users.view" },
 ];
 

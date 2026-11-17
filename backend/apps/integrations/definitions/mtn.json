@@ -1,0 +1,67 @@
+{
+  "key": "mtn",
+  "name": "MTN Business",
+  "description": "MTN Business's solution partner feasibility API: fibre, wireless and LTE products.",
+  "base_url": "https://tfls-feasibility-api.mtnbusiness.co.za",
+  "fields": [
+    {"key": "api_key", "label": "API key", "type": "secret", "help": "Issued by MTN Business to your solution partner account."},
+    {"key": "requestor_email", "label": "Requestor email", "type": "email", "help": "The address MTN records against each request."},
+    {"key": "customer_name", "label": "Customer name", "help": "The customer name MTN records against each site."}
+  ],
+  "auth": [{"field": "api_key", "location": "header", "name": "X-API-KEY"}],
+  "products": {
+    "request": {"method": "GET", "path": "/api/v1/feasibility/product/solution_partner"},
+    "items": "results",
+    "code": "@",
+    "name": "@",
+    "type_rules": [
+      {"when": "contains(lower(@), 'fibre') || contains(lower(@), 'ftth') || contains(lower(@), 'fttb')", "type": "fibre"},
+      {"when": "contains(lower(@), '5g')", "type": "5g"},
+      {"when": "contains(lower(@), 'lte')", "type": "lte"},
+      {"when": "contains(lower(@), 'microwave')", "type": "microwave"},
+      {"when": "contains(lower(@), 'wireless')", "type": "fixed_wireless"}
+    ],
+    "default_type": "other"
+  },
+  "feasibility": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/feasibility/product/solution_partner",
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "inputs": {
+          "$each": "sites",
+          "item": {
+            "latitude": "{{ item.latitude | string }}",
+            "longitude": "{{ item.longitude | string }}",
+            "customer_name": "{{ settings.customer_name }}"
+          }
+        },
+        "product_names": "{{ product_codes }}",
+        "requestor": "{{ settings.requestor_email }}"
+      }
+    },
+    "batch_size": 20,
+    "timeout_seconds": 60,
+    "retries": 2,
+    "sites": "outputs",
+    "site_match": "position",
+    "answers": "product_results",
+    "product": "product_name",
+    "status_rules": [
+      {"when": "lower(product_feasible) == 'yes'", "status": "available"}
+    ],
+    "default_status": "not_available",
+    "absent_status": "not_available",
+    "bandwidths": "product_capacity"
+  },
+  "errors": [
+    {"http_status": 400, "when": "error_message", "kind": "bad_request", "detail": "error_message"}
+  ],
+  "max_concurrency": 2,
+  "requests_per_minute": 30,
+  "schedules": [
+    {"operation": "sync_products", "every_hours": 24},
+    {"operation": "test_connection", "every_hours": 6}
+  ]
+}

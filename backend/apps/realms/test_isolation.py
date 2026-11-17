@@ -12,6 +12,7 @@ The guard tests at the bottom fail when a route, model or query skips the patter
 """
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
@@ -46,7 +47,14 @@ def _snapshot(membership):
 
 # --- the X-Realm header: you can't work in a company you aren't in ------------------------------
 
-COMPANY_ROUTES = ["/api/users/", "/api/roles/"]
+COMPANY_ROUTES = [
+    "/api/users/",
+    "/api/roles/",
+    "/api/integrations/connectors/",
+    "/api/integrations/connections/",
+    "/api/feasibilities/runs/",
+    "/api/feasibilities/runs/products/",
+]
 
 
 @pytest.mark.parametrize("path", COMPANY_ROUTES)
@@ -233,6 +241,15 @@ def test_roles_are_read_only(api, realm):
         "/api/users/1/",
         "/api/roles/",
         "/api/roles/1/",
+        "/api/integrations/connectors/",
+        "/api/integrations/connections/",
+        "/api/integrations/connections/1/",
+        "/api/integrations/connections/1/products/",
+        "/api/feasibilities/runs/",
+        "/api/feasibilities/runs/1/",
+        "/api/feasibilities/runs/1/sites/",
+        "/api/feasibilities/runs/1/export/",
+        "/api/feasibilities/runs/products/",
     ],
 )
 def test_signed_out_requests_are_refused(db, path):
@@ -258,6 +275,8 @@ NOT_TENANT_MODELS = {
     "accounts.User": "people exist across companies; access comes from memberships",
     "realms.Realm": "the tenant itself",
     "realms.RealmMembership": "links a user to a company; its queryset is still strict",
+    "integrations.ConnectorDefinition": "the platform's connector catalogue, the same for every "
+    "company and read-only to them; holds no company data (0003)",
 }
 
 # Every `.across_realms()` call outside tests, by file and enclosing function, with the reason.
@@ -267,6 +286,8 @@ ACROSS_REALMS_CALLS = {
     "users/querysets.py::InvitationQuerySet.by_token_hash": "the public invitation link: the "
     "token is the only thing naming the company",
     "realms/admin.py::_across": "Django admin, for platform staff",
+    "integrations/services.py::due_operations": "the hourly scheduler finds every company's "
+    "due syncs; each then runs with its own company's id (0003)",
 }
 
 
@@ -363,3 +384,361 @@ def test_at_0001_33_the_guards_catch_a_skipped_pattern():
     assert InRealm not in _permission_classes(pattern)[0]
 
     assert not issubclass(RealmMembership, TenantModel)  # hence its entry in the list
+
+
+# --- integrations and feasibilities (0003) --------------------------------------------------------
+
+
+@pytest.fixture
+def blue_feasibility(blue, connectors, providers):
+    """Blue Mast has its own MTN connection, products and a finished run."""
+    from apps.integrations.models import Connection, ProviderProduct
+    from conftest import connect, rows, start_run
+
+    owner = client_for(blue["owner"].user, blue["realm"])
+    connect(
+        owner,
+        "mtn",
+        "Blue MTN",
+        api_key="invented-blue-key",
+        requestor_email="ops@bluemast.example",
+        customer_name="Blue",
+    )
+    products = list(ProviderProduct.objects.in_realm(blue["realm"]))
+    run = start_run(
+        owner, [p.id for p in products], rows(("Blue Depot", -25.7, 28.2)), name="Blue run"
+    )
+    return {
+        "connection": Connection.objects.in_realm(blue["realm"]).get(),
+        "products": products,
+        "run_id": run.json()["id"],
+        **blue,
+    }
+
+
+def _connection_snapshot(connection):
+    connection.refresh_from_db()
+    return (connection.name, connection.settings, connection.secrets_encrypted, connection.enabled)
+
+
+def test_at_0003_25_another_companys_integrations_stay_out_of_sight(api, realm, blue_feasibility):
+    theirs = blue_feasibility["connection"]
+    before = _connection_snapshot(theirs)
+    listed = api.get("/api/integrations/connections/")
+    assert listed.json() == []
+    assert "Blue" not in api.get("/api/feasibilities/runs/products/").content.decode()
+    path = f"/api/integrations/connections/{theirs.id}/"
+    attempts = [
+        api.get(path),
+        api.patch(path, {"name": "Mine now"}, format="json"),
+        api.delete(path),
+        api.post(f"{path}test/"),
+        api.post(f"{path}sync/"),
+        api.get(f"{path}products/"),
+        api.get(f"{path}syncs/"),
+    ]
+    assert [r.status_code for r in attempts] == [404] * len(attempts)
+    assert _connection_snapshot(theirs) == before
+    missing = api.get("/api/integrations/connections/999999/")
+    assert (attempts[0].status_code, attempts[0].json()) == (missing.status_code, missing.json())
+
+
+def test_at_0003_25_another_companys_runs_stay_out_of_sight(api, realm, blue_feasibility):
+    from apps.feasibilities.models import FeasibilityRun
+
+    run_id = blue_feasibility["run_id"]
+    before = FeasibilityRun.objects.in_realm(blue_feasibility["realm"]).get(pk=run_id).status
+    assert api.get("/api/feasibilities/runs/").json() == []
+    path = f"/api/feasibilities/runs/{run_id}/"
+    attempts = [
+        api.get(path),
+        api.get(f"{path}sites/"),
+        api.get(f"{path}sites/", {"ids": "1,2,3"}),
+        api.get(f"{path}export/"),
+        api.post(f"{path}cancel/"),
+        api.post(f"{path}retry-failed/"),
+        api.patch(path, {"name": "x"}, format="json"),
+        api.delete(path),
+    ]
+    assert [r.status_code for r in attempts] == [404] * 6 + [405, 405]
+    assert "Blue Depot" not in "".join(r.content.decode() for r in attempts)
+    assert (
+        FeasibilityRun.objects.in_realm(blue_feasibility["realm"]).get(pk=run_id).status == before
+    )
+
+
+def test_at_0003_26_a_run_cant_use_another_companys_products(
+    api, realm, blue_feasibility, providers
+):
+    from apps.feasibilities.models import FeasibilityRun
+    from conftest import rows, start_run
+
+    sent = len(providers.mtn.feasibility_calls)
+    theirs = [p.id for p in blue_feasibility["products"]]
+    res = start_run(api, theirs, rows(("Mine", -26.1, 28.0)))
+    assert res.status_code == 400 and "products" in res.json()
+    assert FeasibilityRun.objects.in_realm(realm).count() == 0
+    assert len(providers.mtn.feasibility_calls) == sent
+
+
+def test_at_0003_27_tasks_stay_in_their_company(api, realm, blue_feasibility, providers):
+    from apps.feasibilities import services
+    from apps.feasibilities.models import FeasibilityResult, ProviderCheck
+    from apps.integrations.models import ProviderProduct
+    from conftest import connect, rows, start_run
+
+    connect(
+        api,
+        "mtn",
+        "My MTN",
+        api_key="invented-mine-key",
+        requestor_email="a@nw.example",
+        customer_name="NW",
+    )
+    mine = [p.id for p in ProviderProduct.objects.in_realm(realm)]
+    providers.mtn.feasibility_calls.clear()
+    run = start_run(api, mine, rows(("Mine", -26.1, 28.0))).json()
+    (call,) = providers.mtn.feasibility_calls
+    assert call["headers"]["x-api-key"] == "invented-mine-key"
+    results = FeasibilityResult.objects.in_realm(realm)
+    assert results.count() == 3 and {r.run_id for r in results} == {run["id"]}
+    theirs = FeasibilityResult.objects.in_realm(blue_feasibility["realm"])
+    assert {r.run_id for r in theirs} == {blue_feasibility["run_id"]}
+    # A task naming the wrong company finds nothing to do.
+    check = ProviderCheck.objects.in_realm(blue_feasibility["realm"]).first()
+    assert services.perform_check(realm.id, check.id) == "skipped"
+    assert services.plan_run(realm.id, blue_feasibility["run_id"]) == []
+
+
+# --- the live socket follows the API's rules (AT-0003-12, AT-0003-13) ---------------------------
+
+
+async def _live(user, realm_id):
+    from channels.testing import WebsocketCommunicator
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    from config.asgi import application
+
+    communicator = WebsocketCommunicator(
+        application, "/ws/events/", headers=[(b"origin", b"http://localhost:5184")]
+    )
+    connected, _ = await communicator.connect()
+    assert connected
+    token = str(AccessToken.for_user(user)) if user is not None else "not-a-token"
+    await communicator.send_json_to({"type": "auth", "token": token, "realm": realm_id})
+    return communicator, await communicator.receive_output(timeout=2)
+
+
+async def _subscribe(socket, topic, subject=None):
+    await socket.send_json_to({"type": "subscribe", "topic": topic, "subject": subject})
+    return await socket.receive_json_from(timeout=2)
+
+
+async def _event(realm_id, topic, subject=None, items=None):
+    from channels.layers import get_channel_layer
+
+    from apps.realms.events import group_name
+
+    await get_channel_layer().group_send(
+        group_name(realm_id),
+        {
+            "type": "realm.event",
+            "realm": realm_id,
+            "topic": topic,
+            "subject": subject,
+            "items": items,
+            "has_items": items is not None,
+        },
+    )
+
+
+@pytest.fixture
+def fast_socket(monkeypatch):
+    from apps.realms import consumers, listener
+
+    monkeypatch.setattr(listener, "ensure_listening", lambda: None)
+    monkeypatch.setattr(consumers, "FLUSH_SECONDS", 0.05)
+
+
+def _two_companies_with_runs():
+    """(me, my realm, my run id, my site ids, their realm, their run id) with Demo runs."""
+    from apps.integrations.models import ProviderProduct
+    from apps.integrations.services import load_definitions
+    from apps.realms.services import add_member
+    from conftest import connect, make_user, rows, start_run
+
+    load_definitions()
+    me = make_user("tester@example.com")
+    mine = create_realm("Northwind Fibre")
+    add_member(mine, me, ADMIN)
+    owner = make_user("owner@example.com")
+    theirs = create_realm("Blue Mast Telecom")
+    add_member(theirs, owner, ADMIN)
+    ids = {}
+    for user, realm, name in [(me, mine, "Mine"), (owner, theirs, "Theirs")]:
+        client = client_for(user, realm)
+        connect(client, "demo", "Demo")
+        products = list(ProviderProduct.objects.in_realm(realm).values_list("id", flat=True))
+        ids[realm.id] = start_run(
+            client, products, rows((name, -26.2, 28.1), (name + " 2", -26.3, 28.2))
+        ).json()["id"]
+    from apps.feasibilities.models import RunSite
+
+    my_sites = list(RunSite.objects.in_realm(mine).values_list("id", flat=True))
+    return me, mine, ids[mine.id], my_sites, theirs, ids[theirs.id]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_at_0003_12_the_live_socket_shows_only_what_the_api_would(fast_socket, settings):
+    from asgiref.sync import sync_to_async
+
+    settings.INTEGRATIONS_DEMO_ENABLED = True
+    me, mine, run_id, sites, theirs, their_run = await sync_to_async(_two_companies_with_runs)()
+    socket, ready = await _live(me, mine.id)
+    assert json.loads(ready["text"]) == {"type": "ready", "realm": mine.id}
+
+    assert await _subscribe(socket, "feasibility_run", run_id) == {
+        "type": "subscribed",
+        "topic": "feasibility_run",
+        "subject": run_id,
+    }
+    # Another company's run is refused exactly like one that doesn't exist.
+    refused_theirs = await _subscribe(socket, "feasibility_run", their_run)
+    refused_missing = await _subscribe(socket, "feasibility_run", 999999)
+    assert refused_theirs["type"] == refused_missing["type"] == "refused"
+    assert await _subscribe(socket, "no_such_topic") == {
+        "type": "refused",
+        "topic": "no_such_topic",
+        "subject": None,
+    }
+
+    # A finished line arrives with exactly what the API returns for it.
+    await _event(mine.id, "feasibility_run", run_id, [sites[0]])
+    message = await socket.receive_json_from(timeout=2)
+    api_view = await sync_to_async(
+        lambda: (
+            client_for(me, mine)
+            .get(f"/api/feasibilities/runs/{run_id}/sites/", {"ids": str(sites[0])})
+            .json()
+        )
+    )()
+    assert message["type"] == "data" and message["subject"] == run_id
+    assert message["data"]["sites"] == api_view["results"]
+    assert message["data"]["run"]["id"] == run_id
+
+    # Events of the other company never reach this socket.
+    await _event(theirs.id, "feasibility_run", their_run, [1])
+    assert await socket.receive_nothing(timeout=0.2)
+    await socket.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_at_0003_12_losing_access_stops_the_lines(fast_socket, settings):
+    from asgiref.sync import sync_to_async
+
+    settings.INTEGRATIONS_DEMO_ENABLED = True
+    me, mine, run_id, sites, theirs, _ = await sync_to_async(_two_companies_with_runs)()
+
+    # Without feasibilities.view: can't subscribe at all.
+    custom = await sync_to_async(
+        lambda: Role.objects.create(realm=mine, key="none", name="None", permissions=[])
+    )()
+    membership = await RealmMembership.objects.in_realm(mine).filter(user=me).afirst()
+    admin_role = membership.role_id
+    await RealmMembership.objects.in_realm(mine).filter(pk=membership.pk).aupdate(role=custom)
+    socket, _ = await _live(me, mine.id)
+    assert (await _subscribe(socket, "feasibility_run", run_id))["type"] == "refused"
+    await socket.disconnect()
+
+    # Lose it while watching: unsubscribed on the next event.
+    await (
+        RealmMembership.objects.in_realm(mine).filter(pk=membership.pk).aupdate(role_id=admin_role)
+    )
+    socket, _ = await _live(me, mine.id)
+    assert (await _subscribe(socket, "feasibility_run", run_id))["type"] == "subscribed"
+    await RealmMembership.objects.in_realm(mine).filter(pk=membership.pk).aupdate(role=custom)
+    await _event(mine.id, "feasibility_run", run_id, [sites[0]])
+    assert (await socket.receive_json_from(timeout=2))["type"] == "refused"
+    await _event(mine.id, "feasibility_run", run_id, [sites[0]])
+    assert await socket.receive_nothing(timeout=0.2)
+    await socket.disconnect()
+
+    # Removed from the company while watching: disconnected.
+    await (
+        RealmMembership.objects.in_realm(mine).filter(pk=membership.pk).aupdate(role_id=admin_role)
+    )
+    socket, _ = await _live(me, mine.id)
+    await _subscribe(socket, "feasibility_run", run_id)
+    await RealmMembership.objects.in_realm(mine).filter(pk=membership.pk).aupdate(status="removed")
+    await _event(mine.id, "feasibility_run", run_id, [sites[0]])
+    assert await socket.receive_output(timeout=2) == {"type": "websocket.close", "code": 4403}
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_the_live_socket_refuses_outsiders(fast_socket):
+    from asgiref.sync import sync_to_async
+
+    from conftest import make_user
+
+    me = await sync_to_async(make_user)("tester@example.com")
+    mine = await sync_to_async(create_realm)("Northwind Fibre")
+    theirs = await sync_to_async(create_realm)("Blue Mast Telecom")
+    from apps.realms.services import add_member
+
+    await sync_to_async(add_member)(mine, me, ADMIN)
+    not_member = {"type": "websocket.close", "code": 4403}
+    for realm_id in (theirs.id, 999999, "1 OR 1=1"):
+        socket, reply = await _live(me, realm_id)
+        assert reply == not_member
+    socket, reply = await _live(None, mine.id)
+    assert reply == {"type": "websocket.close", "code": 4401}
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_at_0003_13_nothing_is_lost_if_the_connection_drops(fast_socket, settings):
+    """While a tab is away, lines keep finishing; when it reconnects (and refetches through the
+    API, as the portal does on "ready"), every finished line is there."""
+    from asgiref.sync import sync_to_async
+
+    settings.INTEGRATIONS_DEMO_ENABLED = True
+    me, mine, run_id, sites, _, _ = await sync_to_async(_two_companies_with_runs)()
+    socket, _ = await _live(me, mine.id)
+    await _subscribe(socket, "feasibility_run", run_id)
+    await socket.disconnect()
+    await _event(mine.id, "feasibility_run", run_id, sites)  # nobody listening
+    socket, ready = await _live(me, mine.id)
+    assert json.loads(ready["text"])["type"] == "ready"
+    fetched = await sync_to_async(
+        lambda: client_for(me, mine).get(f"/api/feasibilities/runs/{run_id}/sites/").json()
+    )()
+    assert {s["id"] for s in fetched["results"] if s["state"] != "pending"} == set(sites)
+    await socket.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_a_run_event_travels_through_postgres_to_the_socket(settings, monkeypatch):
+    """The real path: services publish in one connection, the listener hears it in another."""
+    import asyncio
+
+    from asgiref.sync import sync_to_async
+
+    from apps.realms import consumers, events, listener
+
+    monkeypatch.setattr(consumers, "FLUSH_SECONDS", 0.05)
+    settings.INTEGRATIONS_DEMO_ENABLED = True
+    me, mine, run_id, sites, theirs, their_run = await sync_to_async(_two_companies_with_runs)()
+    socket, _ = await _live(me, mine.id)
+    try:
+        await _subscribe(socket, "feasibility_run", run_id)
+        await asyncio.sleep(0.5)  # let the listener connect and LISTEN
+        await sync_to_async(events.publish)(theirs.id, "feasibility_run", their_run, [1])
+        await sync_to_async(events.publish)(mine.id, "feasibility_run", run_id, sites[:1])
+        message = await socket.receive_json_from(timeout=5)
+        assert message["type"] == "data"
+        assert [s["id"] for s in message["data"]["sites"]] == sites[:1]
+        assert await socket.receive_nothing(timeout=0.3)
+    finally:
+        await socket.disconnect()
+        task = listener.ensure_listening()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

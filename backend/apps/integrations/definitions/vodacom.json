@@ -1,0 +1,70 @@
+{
+  "key": "vodacom",
+  "name": "Vodacom Business",
+  "description": "Vodacom's feasibility API (run by AfriGIS): answers per product and access medium.",
+  "base_url": "https://vodacom-feasibility-api.afrigis.co.za/v2",
+  "fields": [
+    {"key": "auth_key", "label": "Auth key", "type": "secret", "help": "Issued by Vodacom for the feasibility API."},
+    {"key": "calling_system", "label": "Calling system", "help": "The system name Vodacom registered for your account."}
+  ],
+  "auth": [{"field": "auth_key", "location": "body", "name": "AuthKey"}],
+  "products": {
+    "request": {"method": "GET", "path": "/api/Products"},
+    "items": "@",
+    "code": "id",
+    "name": "name",
+    "type_rules": [
+      {"when": "contains(lower(name), 'fibre')", "type": "fibre"},
+      {"when": "contains(lower(name), '5g')", "type": "5g"},
+      {"when": "contains(lower(name), 'lte')", "type": "lte"},
+      {"when": "contains(lower(name), 'microwave')", "type": "microwave"},
+      {"when": "contains(lower(name), 'wireless')", "type": "fixed_wireless"}
+    ],
+    "default_type": "other"
+  },
+  "test_with": "feasibility",
+  "feasibility": {
+    "request": {
+      "method": "POST",
+      "path": "/api/ProductFeasible",
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "latitude": "{{ site.latitude | string }}",
+        "longitude": "{{ site.longitude | string }}",
+        "productIds": "{{ product_numbers }}",
+        "callingSystem": "{{ settings.calling_system }}"
+      }
+    },
+    "batch_size": 1,
+    "timeout_seconds": 60,
+    "retries": 2,
+    "sites": "@",
+    "site_match": "single",
+    "answers": "products",
+    "product": "productId",
+    "variants": "accessMediums",
+    "variant": "accessMediumId",
+    "variant_name": "name",
+    "variant_type_rules": [
+      {"when": "contains(lower(name), 'fibre')", "type": "fibre"},
+      {"when": "contains(lower(name), '5g')", "type": "5g"},
+      {"when": "contains(lower(name), 'lte')", "type": "lte"},
+      {"when": "contains(lower(name), 'microwave')", "type": "microwave"},
+      {"when": "contains(lower(name), 'wireless')", "type": "fixed_wireless"}
+    ],
+    "status_rules": [
+      {"when": "contains(`[1, 3, 4, 5, 6, 7, 31, 32, 33, 34, 43, 45, 95, 97]`, accessMediumId) && coverage", "status": "available"},
+      {"when": "feasible && coverage && lower(status) == 'complete'", "status": "available"},
+      {"when": "coverage", "status": "coverage_only"}
+    ],
+    "default_status": "not_available",
+    "absent_status": "not_available",
+    "bandwidths": "bandwidthGroupings[].name"
+  },
+  "max_concurrency": 3,
+  "requests_per_minute": 60,
+  "schedules": [
+    {"operation": "sync_products", "every_hours": 24},
+    {"operation": "test_connection", "every_hours": 6}
+  ]
+}

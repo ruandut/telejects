@@ -19,8 +19,11 @@ make setup
 ```
 
 That writes a gitignored `.env` with generated local secrets, starts Postgres and Hatchet,
-installs dependencies, migrates, creates a Hatchet token and seeds a local sign-in. The sign-in
-is `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` in `.env`.
+installs dependencies, migrates (which also loads the built-in connector definitions), creates a
+Hatchet token and seeds a local sign-in. The sign-in is `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD`
+in `.env`. Locally the Demo provider is offered (`INTEGRATIONS_DEMO_ENABLED`), so feasibility
+runs can be tried without real provider credentials. An older `.env` gets the new integrations
+lines with `make env`.
 
 Then, in three terminals:
 

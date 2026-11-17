@@ -7,4 +7,6 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls")),
     path("api/", include("apps.realms.urls")),
     path("api/", include("apps.users.urls")),
+    path("api/", include("apps.integrations.urls")),
+    path("api/", include("apps.feasibilities.urls")),
 ]

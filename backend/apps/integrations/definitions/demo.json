@@ -1,0 +1,24 @@
+{
+  "key": "demo",
+  "name": "Demo",
+  "description": "A pretend provider with predictable answers, for trying feasibilities without real credentials.",
+  "demo": true,
+  "python": "apps.integrations.connectors.demo.DemoConnector",
+  "fields": [
+    {"key": "account_name", "label": "Account name", "help": "Anything; the Demo provider ignores it.", "required": false}
+  ],
+  "feasibility": {
+    "request": {"method": "POST"},
+    "batch_size": 5,
+    "site_match": "position",
+    "answers": "@",
+    "product": "@",
+    "status_rules": []
+  },
+  "max_concurrency": 3,
+  "requests_per_minute": 120,
+  "schedules": [
+    {"operation": "sync_products", "every_hours": 24},
+    {"operation": "test_connection", "every_hours": 6}
+  ]
+}

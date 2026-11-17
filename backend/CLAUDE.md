@@ -42,9 +42,15 @@ Django + DRF + SimpleJWT over ASGI (Daphne), uv for tooling. The root CLAUDE.md 
 
 ## Live updates
 
-- `config/asgi.py` routes websockets to `apps/core/routing.py` (empty for now). A socket only
-  ever says "this kind of data changed", never carries the data, and authenticates with a JWT
-  sent as its first message. Cross-process events go over Postgres `LISTEN`/`NOTIFY`.
+- `config/asgi.py` routes websockets to `apps/realms/routing.py`: one events socket
+  (`apps/realms/consumers.py`), whose topics each app declares in its `live.py`. A socket
+  authenticates with a JWT sent as its first message and follows the API's access rules (root
+  CLAUDE.md, Multi-tenancy).
+- Cross-process events go over Postgres `LISTEN`/`NOTIFY` and carry ids only (`NOTIFY` payloads
+  are capped at 8 KB and are not access-checked). The consumer loads what it sends through the
+  owning app's scoped queryset and the same serializer as the API endpoint, for each subscriber,
+  so the socket and the API always agree on who sees what and what it looks like.
+- Coalesce events (about one a second per subscription) so large jobs don't flood the socket.
 
 ## Tests
 

@@ -14,6 +14,11 @@ import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
+import { Route as AppFeasibilitiesIndexRouteImport } from './routes/_app/feasibilities/index'
+import { Route as AppFeasibilitiesRunIdRouteImport } from './routes/_app/feasibilities/$runId'
+import { Route as AppFeasibilitiesNewRouteImport } from './routes/_app/feasibilities/new'
+import { Route as AppIntegrationsIndexRouteImport } from './routes/_app/integrations/index'
+import { Route as AppIntegrationsConnectionIdRouteImport } from './routes/_app/integrations/$connectionId'
 import { Route as AppUsersIndexRouteImport } from './routes/_app/users/index'
 
 const AppRoute = AppRouteImport.update({
@@ -40,6 +45,32 @@ const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
   path: '/account/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFeasibilitiesIndexRoute = AppFeasibilitiesIndexRouteImport.update({
+  id: '/feasibilities/',
+  path: '/feasibilities/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFeasibilitiesRunIdRoute = AppFeasibilitiesRunIdRouteImport.update({
+  id: '/feasibilities/$runId',
+  path: '/feasibilities/$runId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFeasibilitiesNewRoute = AppFeasibilitiesNewRouteImport.update({
+  id: '/feasibilities/new',
+  path: '/feasibilities/new',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIntegrationsIndexRoute = AppIntegrationsIndexRouteImport.update({
+  id: '/integrations/',
+  path: '/integrations/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIntegrationsConnectionIdRoute =
+  AppIntegrationsConnectionIdRouteImport.update({
+    id: '/integrations/$connectionId',
+    path: '/integrations/$connectionId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppUsersIndexRoute = AppUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -50,14 +81,24 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
+  '/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
+  '/feasibilities/new': typeof AppFeasibilitiesNewRoute
+  '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
   '/account/': typeof AppAccountIndexRoute
+  '/feasibilities/': typeof AppFeasibilitiesIndexRoute
+  '/integrations/': typeof AppIntegrationsIndexRoute
   '/users/': typeof AppUsersIndexRoute
 }
 export interface FileRoutesByTo {
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
+  '/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
+  '/feasibilities/new': typeof AppFeasibilitiesNewRoute
+  '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
   '/account': typeof AppAccountIndexRoute
+  '/feasibilities': typeof AppFeasibilitiesIndexRoute
+  '/integrations': typeof AppIntegrationsIndexRoute
   '/users': typeof AppUsersIndexRoute
 }
 export interface FileRoutesById {
@@ -66,21 +107,51 @@ export interface FileRoutesById {
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
+  '/_app/feasibilities/new': typeof AppFeasibilitiesNewRoute
+  '/_app/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
   '/_app/account/': typeof AppAccountIndexRoute
+  '/_app/feasibilities/': typeof AppFeasibilitiesIndexRoute
+  '/_app/integrations/': typeof AppIntegrationsIndexRoute
   '/_app/users/': typeof AppUsersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/accept-invite' | '/login' | '/account/' | '/users/'
+  fullPaths:
+    | '/'
+    | '/accept-invite'
+    | '/login'
+    | '/feasibilities/$runId'
+    | '/feasibilities/new'
+    | '/integrations/$connectionId'
+    | '/account/'
+    | '/feasibilities/'
+    | '/integrations/'
+    | '/users/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/accept-invite' | '/login' | '/' | '/account' | '/users'
+  to:
+    | '/accept-invite'
+    | '/login'
+    | '/'
+    | '/feasibilities/$runId'
+    | '/feasibilities/new'
+    | '/integrations/$connectionId'
+    | '/account'
+    | '/feasibilities'
+    | '/integrations'
+    | '/users'
   id:
     | '__root__'
     | '/_app'
     | '/accept-invite'
     | '/login'
     | '/_app/'
+    | '/_app/feasibilities/$runId'
+    | '/_app/feasibilities/new'
+    | '/_app/integrations/$connectionId'
     | '/_app/account/'
+    | '/_app/feasibilities/'
+    | '/_app/integrations/'
     | '/_app/users/'
   fileRoutesById: FileRoutesById
 }
@@ -127,6 +198,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccountIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/feasibilities/': {
+      id: '/_app/feasibilities/'
+      path: '/feasibilities'
+      fullPath: '/feasibilities/'
+      preLoaderRoute: typeof AppFeasibilitiesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/feasibilities/$runId': {
+      id: '/_app/feasibilities/$runId'
+      path: '/feasibilities/$runId'
+      fullPath: '/feasibilities/$runId'
+      preLoaderRoute: typeof AppFeasibilitiesRunIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/feasibilities/new': {
+      id: '/_app/feasibilities/new'
+      path: '/feasibilities/new'
+      fullPath: '/feasibilities/new'
+      preLoaderRoute: typeof AppFeasibilitiesNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/integrations/': {
+      id: '/_app/integrations/'
+      path: '/integrations'
+      fullPath: '/integrations/'
+      preLoaderRoute: typeof AppIntegrationsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/integrations/$connectionId': {
+      id: '/_app/integrations/$connectionId'
+      path: '/integrations/$connectionId'
+      fullPath: '/integrations/$connectionId'
+      preLoaderRoute: typeof AppIntegrationsConnectionIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/users/': {
       id: '/_app/users/'
       path: '/users'
@@ -139,13 +245,23 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
+  AppFeasibilitiesRunIdRoute: typeof AppFeasibilitiesRunIdRoute
+  AppFeasibilitiesNewRoute: typeof AppFeasibilitiesNewRoute
+  AppIntegrationsConnectionIdRoute: typeof AppIntegrationsConnectionIdRoute
   AppAccountIndexRoute: typeof AppAccountIndexRoute
+  AppFeasibilitiesIndexRoute: typeof AppFeasibilitiesIndexRoute
+  AppIntegrationsIndexRoute: typeof AppIntegrationsIndexRoute
   AppUsersIndexRoute: typeof AppUsersIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
+  AppFeasibilitiesRunIdRoute: AppFeasibilitiesRunIdRoute,
+  AppFeasibilitiesNewRoute: AppFeasibilitiesNewRoute,
+  AppIntegrationsConnectionIdRoute: AppIntegrationsConnectionIdRoute,
   AppAccountIndexRoute: AppAccountIndexRoute,
+  AppFeasibilitiesIndexRoute: AppFeasibilitiesIndexRoute,
+  AppIntegrationsIndexRoute: AppIntegrationsIndexRoute,
   AppUsersIndexRoute: AppUsersIndexRoute,
 }
 

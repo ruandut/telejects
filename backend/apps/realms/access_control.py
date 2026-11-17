@@ -15,6 +15,10 @@ from dataclasses import dataclass, field
 PERMISSIONS: dict[str, str] = {
     "users.view": "See the company's users",
     "users.manage": "Add, edit and remove users, and change their roles",
+    "integrations.view": "See the company's provider connections and their products",
+    "integrations.manage": "Connect providers, change their credentials, and test or sync them",
+    "feasibilities.view": "See feasibility runs and their results, and export them",
+    "feasibilities.run": "Start, cancel and retry feasibility runs",
 }
 
 ADMIN = "admin"
@@ -31,10 +35,11 @@ SYSTEM_ROLES: dict[str, SystemRole] = {
     ADMIN: SystemRole("Admin", "Runs the company's account. Can do everything."),
     "project_manager": SystemRole(
         "Project manager",
-        "Plans and runs projects. Can see the company's users.",
-        frozenset({"users.view"}),
+        "Plans and runs projects. Can see the company's users and integrations, and run "
+        "feasibilities.",
+        frozenset({"users.view", "integrations.view", "feasibilities.view", "feasibilities.run"}),
     ),
-    "viewer": SystemRole("Viewer", "Read-only access."),
+    "viewer": SystemRole("Viewer", "Read-only access.", frozenset({"feasibilities.view"})),
 }
 
 

@@ -31,7 +31,7 @@ export default defineConfig({
     // Keeps the browser's Host, so links Django builds point at this server.
     proxy: {
       "/api": { target: "http://localhost:8010", changeOrigin: false },
-      // Websockets (none yet), served by the same Django process.
+      // The events websocket (src/network/socket.ts), served by the same Django process.
       "/ws": { target: "ws://localhost:8010", ws: true, changeOrigin: false },
     },
   },

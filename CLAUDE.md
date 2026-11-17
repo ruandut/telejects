@@ -1,18 +1,19 @@
 # Telejects
 
 A project management platform for telecoms work ("tele-projects"). The specs in `specs/` build
-it up; for now the app is a sign-in and an empty dashboard on the same stack and process as
-eden-tracker.
+it up, on the same stack and process as eden-tracker.
 
-Planned first specs:
+Specs so far:
 - **0001 User management.**
 - **0002 My settings** (changing my password).
-- **0003 Integrations**, starting with feasibilities: a recreated and improved version of the
-  feasibilities feature in Rapid (`~/SDXWorkspace/Rapid/connect-rapid`). Network providers (MTN,
-  Vodacom, ...) each have their own feasibility API, products and way of querying. The plan is a
-  connector layer in the style of primer.io: our side defines what a feasibility needs (a name,
-  a lat/lon, the products wanted, ...) and each provider's connector maps its API onto that. The
-  architecture is to be discussed with Ruan before 0003 is written: don't design it alone.
+- **0003 Integrations and bulk feasibilities**: a recreated and improved version of the
+  feasibilities feature in Rapid (`~/SDXWorkspace/Rapid/connect-rapid`), with a connector layer
+  in the style of primer.io. Our side is a canonical model (`apps/integrations/canonical.py`);
+  each provider is a **connector definition as data** (`apps/integrations/definitions/*.json`,
+  schema in `spec.py`), run by one engine. Add a provider with a definition, not code; a Python
+  connector (`apps/integrations/connectors/`) is the escape hatch only for one a definition can't
+  describe. Companies connect their own provider accounts; secrets are encrypted at rest.
+- **Next:** Herotel and Link Africa (definitions only), then single-site feasibility from a map.
 - **Later: client API access.** An Integrations section where a company creates API clients and
   works with a public, versioned API directly, feasibilities first. OAuth2 client credentials
   through django-oauth-toolkit: each API client belongs to a realm, its scopes are our
@@ -33,7 +34,7 @@ obvious from the code. `backend/CLAUDE.md` and `frontend/CLAUDE.md` hold each si
 | Client state | Zustand (tokens, UI filters) | context for global state |
 | UI | shadcn (`frontend/src/components/ui`, vendored) + Tailwind v4 | other component libraries |
 | API | Django + DRF + SimpleJWT, served over ASGI (Daphne) | WSGI servers |
-| Live updates | Django Channels websocket, events over Postgres `LISTEN`/`NOTIFY` | Redis, polling as the main mechanism, data over the socket |
+| Live updates | Django Channels websocket, events over Postgres `LISTEN`/`NOTIFY`, messages built by the API's scoped querysets and serializers | Redis, polling as the main mechanism, socket data that skips the API's access checks |
 | Python tooling | uv (`uv add`, `uv run`) | pip, poetry |
 | Background work, cron | Hatchet, on the same Postgres server | Celery, RQ, threads |
 | Database | Postgres | |
@@ -100,8 +101,13 @@ companies is the worst bug this system can have.
   an allowlist to make a test pass; fix the endpoint or model.
 - Hatchet tasks run outside a request, so they take a `realm_id` and filter by it. File storage
   paths include the realm id.
-- A websocket admits only an active member of the company it names and only ever says "this
-  kind of data changed". It never carries data, so access is decided in one place, the API.
+- **A websocket is held to the same rules as the API.** It authenticates with a JWT, admits only
+  an active member of the company it names, and checks the permission code (later, project
+  visibility) for what it subscribes to. Data it sends is built for each subscriber with the same
+  scoped queryset (`in_realm`, later `visible_to(membership)`) and serializer as the matching API
+  endpoint, never taken from a `NOTIFY` payload: events carry ids, the consumer reads. Access is
+  rechecked before sending, so someone removed or downgraded stops receiving. Every consumer gets
+  isolation tests like an endpoint.
 - Connectors (spec 0003) are no exception: provider credentials, requests and results belong to
   a company.
 - **Per-project access is coming** (board-based, like monday.com): a guest from outside, such as

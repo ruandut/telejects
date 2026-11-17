@@ -51,6 +51,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+/** A file from /api/* (an export), for saving. */
+export async function apiFile(path: string): Promise<{ blob: Blob; filename: string }> {
+  const res = await authedFetch(path, { headers: { Accept: "*/*" } });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null));
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "download";
+  return { blob: await res.blob(), filename };
+}
+
 /** For the few routes that work before sign-in. Sends no token and no company. */
 export async function publicApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);

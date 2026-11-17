@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     "apps.jobs",
     "apps.users",
     # Domain apps go below, one per concern.
+    "apps.integrations",
+    "apps.feasibilities",
 ]
 
 MIDDLEWARE = [
@@ -131,6 +133,13 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5184"])
 CORS_ALLOW_HEADERS = (*default_headers, "x-realm")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+# --- Integrations (0003) ---------------------------------------------------
+# Fernet keys that encrypt connections' provider secrets, newest first (comma-separated). No
+# default: without them a connection's credentials can't be stored or read.
+INTEGRATIONS_ENCRYPTION_KEYS = env.list("INTEGRATIONS_ENCRYPTION_KEYS")
+# Offer the Demo connector (a pretend provider). On for local development only.
+INTEGRATIONS_DEMO_ENABLED = env.bool("INTEGRATIONS_DEMO_ENABLED", default=False)
 
 # --- Email -----------------------------------------------------------------
 # Without EMAIL_URL, mail is printed to the log of whichever process sends it (the Hatchet

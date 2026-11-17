@@ -112,8 +112,11 @@ def test_admin_always_has_every_permission(realm, monkeypatch):
 @pytest.mark.parametrize(
     "key,expected",
     [
-        ("project_manager", {"users.view"}),
-        ("viewer", set()),
+        (
+            "project_manager",
+            {"users.view", "integrations.view", "feasibilities.view", "feasibilities.run"},
+        ),
+        ("viewer", {"feasibilities.view"}),
     ],
 )
 def test_built_in_role_permissions(realm, key, expected):

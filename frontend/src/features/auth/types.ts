@@ -1,5 +1,11 @@
 /** A permission code from the backend's registry (apps/realms/access_control.py). */
-export type Permission = "users.view" | "users.manage";
+export type Permission =
+  | "users.view"
+  | "users.manage"
+  | "integrations.view"
+  | "integrations.manage"
+  | "feasibilities.view"
+  | "feasibilities.run";
 
 export type RoleRef = { id: number; key: string; name: string };
 

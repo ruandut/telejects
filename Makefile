@@ -26,8 +26,9 @@ setup: up      ## First-time setup: deps, migrations, Hatchet token, local sign-
 hatchet-token: ## Create a Hatchet API token and write it into .env
 	./scripts/hatchet_token.sh
 
-migrate:
+migrate:       ## Migrate, then load the built-in connector definitions (new versions only)
 	cd backend && uv run python manage.py migrate
+	cd backend && uv run python manage.py load_connectors
 
 seed:          ## Local sign-in from .env. Safe to re-run.
 	cd backend && uv run python manage.py seed

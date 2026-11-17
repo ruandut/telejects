@@ -130,7 +130,7 @@ def test_at_0001_07_some_roles_dont_see_users_at_all(realm):
     client = client_for(someone.user, realm)
     assert client.get("/api/users/").status_code == 403
     assert client.get("/api/roles/").status_code == 403
-    assert client.get("/api/auth/me/").json()["realm"]["permissions"] == []
+    assert client.get("/api/auth/me/").json()["realm"]["permissions"] == ["feasibilities.view"]
 
 
 def test_at_0001_08_an_admin_cancels_an_invitation(api, realm):
@@ -209,7 +209,12 @@ def test_at_0001_15_i_pick_a_role_when_adding_someone(api, realm):
     assert [r["name"] for r in roles] == ["Admin", "Project manager", "Viewer"]
     assert all(r["description"] for r in roles)
     pm = next(r for r in roles if r["key"] == "project_manager")
-    assert [p["code"] for p in pm["permissions"]] == ["users.view"]
+    assert [p["code"] for p in pm["permissions"]] == [
+        "users.view",
+        "integrations.view",
+        "feasibilities.view",
+        "feasibilities.run",
+    ]
 
     res = api.post("/api/users/", {"email": "x@example.com", "name": "No Role"}, format="json")
     assert res.status_code == 400
@@ -239,11 +244,21 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
     assert me["name"] == "Tess Tester"
     assert me["realm"]["name"] == "Northwind Fibre"
     assert me["realm"]["role"]["key"] == ADMIN
-    assert me["realm"]["permissions"] == ["users.manage", "users.view"]
+    assert me["realm"]["permissions"] == [
+        "feasibilities.run",
+        "feasibilities.view",
+        "integrations.manage",
+        "integrations.view",
+        "users.manage",
+        "users.view",
+    ]
 
     pm = member(realm, "pm@example.com", "project_manager")
     assert client_for(pm.user, realm).get("/api/auth/me/").json()["realm"]["permissions"] == [
-        "users.view"
+        "feasibilities.run",
+        "feasibilities.view",
+        "integrations.view",
+        "users.view",
     ]
 
 

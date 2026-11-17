@@ -3,6 +3,7 @@ import { Fragment, useEffect, type ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/features/auth/api";
 import { queryClient } from "@/network/query-client";
+import { liveSocket } from "@/network/socket";
 import { useRealm } from "@/stores/realm";
 
 /**
@@ -30,8 +31,12 @@ export function RealmGate({ children }: { children: ReactNode }) {
     if (realmId === null ? current !== null : current !== realmId) enterRealm(current);
   }, [me.data, current, realmId]);
 
+  const settled = realmId !== null && current === realmId;
+  // The live socket works in the settled company only, and follows it when it changes.
+  useEffect(() => liveSocket.setRealm(settled ? realmId : null), [settled, realmId]);
+
   if (me.data && !me.data.realm && !me.data.realms.length) return <NoRealm />;
-  if (realmId === null || current !== realmId) {
+  if (!settled) {
     return (
       <div className="mx-auto grid w-full max-w-5xl gap-3 p-4 md:p-8">
         <Skeleton className="h-8 w-56" />

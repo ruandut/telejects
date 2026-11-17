@@ -1,4 +1,4 @@
-"""ASGI entry point: Django for HTTP, Channels for websockets (apps/core/routing.py)."""
+"""ASGI entry point: Django for HTTP, Channels for websockets (apps/realms/routing.py)."""
 
 import os
 
@@ -11,7 +11,7 @@ django_application = get_asgi_application()
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
 
-from apps.core.routing import websocket_urlpatterns  # noqa: E402
+from apps.realms.routing import websocket_urlpatterns  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
