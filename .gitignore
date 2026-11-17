@@ -1,0 +1,15 @@
+.DS_Store
+# Every environment value lives here; scripts/init_env.sh writes it. Never commit one.
+.env
+.env.*
+*.local
+__pycache__/
+*.pyc
+backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/staticfiles/
+node_modules/
+frontend/dist/
+# TanStack Router plugin scratch files
+frontend/.tanstack/

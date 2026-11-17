@@ -1,0 +1,164 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Geist Variable", sans-serif;
+  --font-heading: "Geist Variable", sans-serif;
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-deeper: var(--brand-deeper);
+  --color-brand-on-deep: var(--brand-on-deep);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Placeholder palette (deep navy, amber accent) until the brand is decided. Screens use these
+   tokens, never raw colours, so swapping the brand is a change to this file only. */
+:root {
+  --brand-accent: #c9871f;
+  /* The brand panel is deep navy in both themes. */
+  --brand-deep: #1f3a5f;
+  --brand-deeper: #0e1c30;
+  --brand-on-deep: #f5f7fa;
+
+  --background: #f8f9fb;
+  --foreground: #172030;
+  --card: #ffffff;
+  --card-foreground: #172030;
+  --popover: #ffffff;
+  --popover-foreground: #172030;
+  --primary: #1f3a5f;
+  --primary-foreground: #f8f9fb;
+  --secondary: #eceff4;
+  --secondary-foreground: #1c2b40;
+  --muted: #eff1f5;
+  --muted-foreground: #5d6878;
+  --accent: #e7edf5;
+  --accent-foreground: #1c2b40;
+  --destructive: #b3261e;
+  --border: #e0e4ea;
+  --input: #d3d9e1;
+  --ring: #3a6aa3;
+  --chart-1: #1f3a5f;
+  --chart-2: #c9871f;
+  --chart-3: #4c7bb5;
+  --chart-4: #7d6a45;
+  --chart-5: #9fb7d4;
+  --radius: 0.625rem;
+  --sidebar: #f2f4f7;
+  --sidebar-foreground: #172030;
+  --sidebar-primary: #1f3a5f;
+  --sidebar-primary-foreground: #f8f9fb;
+  --sidebar-accent: #e7edf5;
+  --sidebar-accent-foreground: #1c2b40;
+  --sidebar-border: #e0e4ea;
+  --sidebar-ring: #3a6aa3;
+}
+
+.dark {
+  --brand-accent: #e8b25a;
+
+  --background: #0c121b;
+  --foreground: #e9edf2;
+  --card: #131b27;
+  --card-foreground: #e9edf2;
+  --popover: #131b27;
+  --popover-foreground: #e9edf2;
+  --primary: #7aa7dc;
+  --primary-foreground: #08111d;
+  --secondary: #1b2636;
+  --secondary-foreground: #e9edf2;
+  --muted: #182230;
+  --muted-foreground: #98a3b3;
+  --accent: #1d2a3c;
+  --accent-foreground: #e9edf2;
+  --destructive: #f2857c;
+  --border: #ffffff1a;
+  --input: #ffffff26;
+  --ring: #7aa7dc;
+  --chart-1: #7aa7dc;
+  --chart-2: #e8b25a;
+  --chart-3: #a9c8ec;
+  --chart-4: #a8925a;
+  --chart-5: #3a6aa3;
+  --sidebar: #101823;
+  --sidebar-foreground: #e9edf2;
+  --sidebar-primary: #7aa7dc;
+  --sidebar-primary-foreground: #08111d;
+  --sidebar-accent: #1d2a3c;
+  --sidebar-accent-foreground: #e9edf2;
+  --sidebar-border: #ffffff1a;
+  --sidebar-ring: #7aa7dc;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading;
+  }
+  fieldset {
+    min-width: 0;
+  }
+}
+
+@layer components {
+  /* A native <select> with the browser's arrow replaced by a chevron. Grey works in both themes. */
+  .native-select {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1rem;
+  }
+}

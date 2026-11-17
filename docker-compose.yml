@@ -1,0 +1,55 @@
+# Infrastructure only. The Django API, Hatchet worker and Vite+ dev server run on your machine
+# (see README.md). Hatchet uses Postgres as its queue, on the same server as the app database.
+# Host ports are offset from the defaults so this can run next to other projects.
+# Secrets come from the gitignored .env that scripts/init_env.sh writes; none live in this file.
+name: telejects
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: telejects
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run make setup to create .env}
+      POSTGRES_DB: telejects
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      # Creates the separate `hatchet` database on first boot.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP: the socket answers during first-time setup, before other containers can connect.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U telejects -d telejects"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Hatchet engine + API + dashboard in one container. Dashboard: http://localhost:8892
+  hatchet:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:v0.110.5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8892:8888" # dashboard + REST API
+      - "7081:7077" # gRPC: workers and SDK clients connect here
+    environment:
+      DATABASE_URL: postgresql://telejects:${POSTGRES_PASSWORD}@postgres:5432/hatchet?sslmode=disable
+      RABBITMQ_ENABLED: "false"
+      SERVER_MSGQUEUE_KIND: postgres
+      SERVER_AUTH_COOKIE_DOMAIN: localhost
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_AUTH_SET_EMAIL_VERIFIED: "t"
+      SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_GRPC_PORT: "7077"
+      SERVER_GRPC_BROADCAST_ADDRESS: localhost:7081
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: localhost:7077
+      SERVER_URL: http://localhost:8892
+      SERVER_DEFAULT_ENGINE_VERSION: V1
+    volumes:
+      - hatchet_config:/config
+
+volumes:
+  postgres_data:
+  hatchet_config:
