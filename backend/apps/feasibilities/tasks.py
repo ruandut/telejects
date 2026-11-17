@@ -1,7 +1,8 @@
 """Feasibility runs on Hatchet: planning a run into provider checks, then one task per check.
 
 Each check task is limited per connection (its connector's concurrency and requests per minute),
-so a big run never floods a provider, and runs in its own company (realm_id).
+so a big run never floods a provider, and runs in its own company (realm_id). Companies using
+one of Telejects' platform accounts share that account's limits.
 """
 
 from datetime import timedelta
@@ -25,7 +26,9 @@ class CheckInput(BaseModel):
     realm_id: int
     run_id: int
     check_id: int
-    connection_id: int
+    # Whose credentials the call uses: "connection-<id>" or, shared by every company on one of
+    # Telejects' accounts, "platform-<id>" (0004).
+    limit_key: str
     max_concurrency: int
     requests_per_minute: int
 
@@ -36,13 +39,13 @@ class CheckInput(BaseModel):
     execution_timeout=timedelta(minutes=10),
     retries=1,
     concurrency=ConcurrencyExpression(
-        expression="string(input.connection_id)",
+        expression="input.limit_key",
         max_runs="input.max_concurrency",
         limit_strategy=ConcurrencyLimitStrategy.GROUP_ROUND_ROBIN,
     ),
     rate_limits=[
         RateLimit(
-            dynamic_key="'connection-' + string(input.connection_id)",
+            dynamic_key="input.limit_key",
             units=1,
             limit="input.requests_per_minute",
             duration=RateLimitDuration.MINUTE,
@@ -71,12 +74,12 @@ def enqueue_checks(realm_id: int, run_id: int, check_ids: list[int]) -> None:
                 realm_id=realm_id,
                 run_id=run_id,
                 check_id=check_id,
-                connection_id=connection_id,
+                limit_key=limit_key,
                 max_concurrency=max_concurrency,
                 requests_per_minute=requests_per_minute,
             )
         )
-        for check_id, (connection_id, max_concurrency, requests_per_minute) in limits.items()
+        for check_id, (limit_key, max_concurrency, requests_per_minute) in limits.items()
     ]
     for start in range(0, len(items), 500):
         feasibility_check.run_many(items[start : start + 500], wait_for_result=False)

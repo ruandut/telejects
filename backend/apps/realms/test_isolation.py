@@ -277,6 +277,9 @@ NOT_TENANT_MODELS = {
     "realms.RealmMembership": "links a user to a company; its queryset is still strict",
     "integrations.ConnectorDefinition": "the platform's connector catalogue, the same for every "
     "company and read-only to them; holds no company data (0003)",
+    "integrations.PlatformAccount": "Telejects' own provider credentials, kept by platform staff; "
+    "a company only reaches one through its own PlatformGrant and never sees its settings or "
+    "secrets (0004)",
 }
 
 # Every `.across_realms()` call outside tests, by file and enclosing function, with the reason.
@@ -288,6 +291,8 @@ ACROSS_REALMS_CALLS = {
     "realms/admin.py::_across": "Django admin, for platform staff",
     "integrations/services.py::due_operations": "the hourly scheduler finds every company's "
     "due syncs; each then runs with its own company's id (0003)",
+    "integrations/services.py::_publish_platform": "tells each company using a platform account "
+    "that its connections changed (ids only); the socket then checks each subscriber (0004)",
 }
 
 

@@ -22,7 +22,14 @@ from apps.realms.models import Realm
 
 from .canonical import ConnectorError, ErrorKind
 from .engine import Connector, build_connector
-from .models import Connection, ConnectorDefinition, ProviderProduct, SyncRun
+from .models import (
+    Connection,
+    ConnectorDefinition,
+    PlatformAccount,
+    PlatformGrant,
+    ProviderProduct,
+    SyncRun,
+)
 from .spec import ConnectorSpec
 
 logger = logging.getLogger(__name__)
@@ -93,12 +100,46 @@ def definition_for(key: str) -> ConnectorDefinition:
     raise ValidationError({"connector": "Choose one of the available connectors."})
 
 
+PLATFORM_UNAVAILABLE = "Telejects' account for this provider isn't available to you any more."
+PLATFORM_FAILING = "Telejects' account for this provider is failing; we're on it."
+
+
+def granted_account(connection: Connection) -> PlatformAccount | None:
+    """The platform account a platform connection may use: granted to its company, and on."""
+    if not connection.uses_platform:
+        return None
+    granted = PlatformGrant.objects.in_realm(connection.realm_id).of_account(
+        connection.platform_account_id
+    )
+    account = connection.platform_account
+    if not granted.exists() or not account.enabled:
+        return None
+    return account
+
+
+def credentials_of(connection: Connection) -> PlatformAccount | Connection:
+    """Whose account a connection's calls use. The one place that decides it (0004)."""
+    if not connection.uses_platform:
+        return connection
+    account = granted_account(connection)
+    if account is None:
+        raise ConnectorError(ErrorKind.BAD_REQUEST, PLATFORM_UNAVAILABLE)
+    return account
+
+
+def usage_of(connection: Connection) -> dict:
+    """What a provider call records about whose credentials it used."""
+    if connection.uses_platform:
+        return {"credentials": "platform", "platform_account_id": connection.platform_account_id}
+    return {"credentials": "own", "platform_account_id": None}
+
+
 def connector_for(connection: Connection) -> tuple[Connector, ConnectorDefinition]:
     definition = connection.definition()
     if definition is None:
         raise ConnectorError(ErrorKind.BAD_REQUEST, "Its connector is no longer offered.")
-    spec = definition.parsed
-    return build_connector(spec, connection.settings, connection.secrets), definition
+    owner = credentials_of(connection)
+    return build_connector(definition.parsed, owner.settings, owner.secrets), definition
 
 
 # --- connections ------------------------------------------------------------------------------
@@ -172,10 +213,31 @@ def update_connection(
     name: str | None = None,
     fields: dict | None = None,
     enabled: bool | None = None,
+    credentials: str | None = None,
 ) -> Connection:
     retest = False
     if name is not None:
         connection.name = _check_name(connection.realm, name, exclude=connection.pk)
+    if credentials == Connection.Source.PLATFORM and not connection.uses_platform:
+        connection.platform_account = _grant_for(connection)
+        connection.credentials = Connection.Source.PLATFORM
+        # The company's own account is no longer used, so its credentials go.
+        connection.settings, connection.secrets = {}, {}
+        retest = True
+        fields = None
+    elif credentials == Connection.Source.OWN and connection.uses_platform:
+        definition = connection.definition()
+        if definition is None:
+            raise ValidationError({"fields": "This connector is no longer offered."})
+        connection.settings, connection.secrets = _split_fields(definition.parsed, fields or {})
+        connection.credentials = Connection.Source.OWN
+        connection.platform_account = None
+        retest = True
+        fields = None
+    elif fields and connection.uses_platform:
+        raise ValidationError(
+            {"fields": "This connection uses Telejects' account. Switch to your own first."}
+        )
     if fields:
         definition = connection.definition()
         if definition is None:
@@ -186,6 +248,8 @@ def update_connection(
         connection.secrets = secrets
         retest = (settings, secrets) != before
     if enabled is not None:
+        if enabled and connection.uses_platform and granted_account(connection) is None:
+            raise ValidationError({"enabled": PLATFORM_UNAVAILABLE + " Use your own account."})
         retest = retest or (enabled and not connection.enabled)
         connection.enabled = enabled
     if retest:
@@ -196,6 +260,75 @@ def update_connection(
     if retest and connection.enabled:
         _schedule(connection, "connect", Trigger.MANUAL)
     return connection
+
+
+def _grant_for(connection: Connection) -> PlatformAccount:
+    """The granted, enabled platform account for this connection's provider, or a refusal that
+    looks the same whether no account exists or the company just isn't granted one."""
+    grant = (
+        PlatformGrant.objects.in_realm(connection.realm_id)
+        .filter(account__connector_key=connection.connector_key, account__enabled=True)
+        .select_related("account")
+        .order_by("id")
+        .first()
+    )
+    if grant is None:
+        raise ValidationError({"credentials": "Telejects' account isn't available for this."})
+    return grant.account
+
+
+def granted_connectors(realm: Realm) -> set[str]:
+    """The connector keys this company may use Telejects' accounts for."""
+    return set(
+        PlatformGrant.objects.in_realm(realm)
+        .filter(account__enabled=True)
+        .values_list("account__connector_key", flat=True)
+    )
+
+
+# --- grants (platform staff only: Django admin and manage.py) ----------------------------------
+
+
+@transaction.atomic
+def grant_platform_account(realm: Realm, account: PlatformAccount) -> PlatformGrant:
+    """Let a company use a platform account. It is connected through it straight away, unless
+    it already has a connection to that provider, which keeps its own account."""
+    grant, _ = PlatformGrant.objects.in_realm(realm).get_or_create(realm=realm, account=account)
+    existing = Connection.objects.in_realm(realm).filter(connector_key=account.connector_key)
+    if not existing.exists():
+        definition = account.definition()
+        base = definition.parsed.name if definition else account.connector_key
+        name, n = f"{base} (Telejects account)", 2
+        while Connection.objects.in_realm(realm).filter(name__iexact=name).exists():
+            name, n = f"{base} (Telejects account {n})", n + 1
+        connection = Connection.objects.create(
+            realm=realm,
+            name=name,
+            connector_key=account.connector_key,
+            credentials=Connection.Source.PLATFORM,
+            platform_account=account,
+        )
+        _schedule(connection, "connect", Trigger.CONNECT)
+    else:
+        # A connection the grant was withdrawn from earlier comes back on.
+        back = existing.filter(platform_account=account, enabled=False)
+        for connection in back:
+            connection.enabled = True
+            connection.save(update_fields=["enabled", "updated_at"])
+            _schedule(connection, "connect", Trigger.CONNECT)
+    events.publish(realm.id, TOPIC)
+    return grant
+
+
+@transaction.atomic
+def withdraw_platform_account(realm: Realm, account: PlatformAccount) -> int:
+    """Stop a company using a platform account. Its connections through it are turned off;
+    their runs and results stay. Returns how many were turned off."""
+    PlatformGrant.objects.in_realm(realm).of_account(account).delete()
+    using = Connection.objects.in_realm(realm).filter(platform_account=account, enabled=True)
+    count = using.update(enabled=False, updated_at=timezone.now())
+    events.publish(realm.id, TOPIC)
+    return count
 
 
 @transaction.atomic
@@ -228,7 +361,11 @@ def request_operation(connection: Connection, operation: str) -> None:
 
 def _start(connection: Connection, kind: str, trigger: str) -> SyncRun:
     run = SyncRun.objects.create(
-        realm_id=connection.realm_id, connection=connection, kind=kind, trigger=trigger
+        realm_id=connection.realm_id,
+        connection=connection,
+        kind=kind,
+        trigger=trigger,
+        **usage_of(connection),
     )
     events.publish(connection.realm_id, TOPIC)
     return run
@@ -244,21 +381,42 @@ def _finish(run: SyncRun, error: ConnectorError | None = None) -> None:
     events.publish(run.realm_id, TOPIC)
 
 
-def _set_health(connection: Connection, error: ConnectorError | None) -> None:
-    connection.health_checked_at = timezone.now()
+def _set_health(owner: Connection | PlatformAccount, error: ConnectorError | None) -> None:
+    """Record what a check said about the credentials it used: a company's own connection's,
+    or a platform account's (shared by every company using it)."""
+    owner.health_checked_at = timezone.now()
     if error is None:
-        connection.health, connection.health_error = Health.OK, ""
+        owner.health, owner.health_error = Health.OK, ""
     elif error.kind == ErrorKind.AUTH:
-        connection.health, connection.health_error = Health.FAILING, error.message[:500]
+        owner.health, owner.health_error = Health.FAILING, error.message[:500]
     else:
         # Not the credentials' fault: say so, but keep what we last knew about them.
-        connection.health_error = error.message[:500]
-    connection.save(update_fields=["health", "health_error", "health_checked_at", "updated_at"])
+        owner.health_error = error.message[:500]
+    owner.save(update_fields=["health", "health_error", "health_checked_at", "updated_at"])
+    if isinstance(owner, PlatformAccount):
+        _publish_platform(owner)
+
+
+def _health_owner(connection: Connection) -> Connection | PlatformAccount:
+    account = granted_account(connection)
+    return account if account is not None else connection
+
+
+def _publish_platform(account: PlatformAccount) -> None:
+    """Tell every company using a platform account that its connections changed."""
+    realms = (
+        Connection.objects.across_realms()
+        .filter(platform_account=account)
+        .values_list("realm_id", flat=True)
+        .distinct()
+    )
+    for realm_id in realms:
+        events.publish(realm_id, TOPIC)
 
 
 def mark_credentials_refused(connection: Connection, error: ConnectorError) -> None:
-    """A run's provider call was refused: the connection is failing until it's fixed."""
-    _set_health(connection, error)
+    """A run's provider call was refused: those credentials are failing until they're fixed."""
+    _set_health(_health_owner(connection), error)
     events.publish(connection.realm_id, TOPIC)
 
 
@@ -271,7 +429,7 @@ def test_connection(connection: Connection, trigger: str) -> bool:
         connector.test_connection()
     except ConnectorError as failure:
         error = failure
-    _set_health(connection, error)
+    _set_health(_health_owner(connection), error)
     _finish(run, error)
     return error is None
 
@@ -284,7 +442,7 @@ def sync_products(connection: Connection, trigger: str) -> bool:
         found, _calls = connector.list_products()
     except ConnectorError as error:
         if error.kind == ErrorKind.AUTH:
-            _set_health(connection, error)
+            _set_health(_health_owner(connection), error)
         _finish(run, error)
         return False
     if not found:
@@ -354,9 +512,55 @@ def due_operations(now=None) -> list[tuple[int, int, str]]:
         if spec is None:
             continue
         for schedule in spec.schedules:
+            # A platform account's credentials are checked once, not once per company.
+            if connection.uses_platform and schedule.operation == Kind.TEST_CONNECTION:
+                continue
             last = SyncRun.objects.in_realm_id(connection.realm_id).last_of(
                 connection, schedule.operation
             )
             if last is None or last.started_at <= now - timedelta(hours=schedule.every_hours):
                 due.append((connection.realm_id, connection.id, schedule.operation))
+    return due
+
+
+# --- platform accounts (run by the worker) ------------------------------------------------------
+
+
+def test_platform_account(account_id: int) -> bool:
+    """Check a platform account's credentials once, for every company using it."""
+    account = PlatformAccount.objects.filter(pk=account_id, enabled=True).first()
+    if account is None:
+        return False
+    definition = account.definition()
+    error = None
+    try:
+        if definition is None:
+            raise ConnectorError(ErrorKind.BAD_REQUEST, "Its connector is no longer offered.")
+        build_connector(definition.parsed, account.settings, account.secrets).test_connection()
+    except ConnectorError as failure:
+        error = failure
+    _set_health(account, error)
+    return error is None
+
+
+def due_platform_checks(now=None) -> list[int]:
+    """Platform accounts whose scheduled credential check is due."""
+    now = now or timezone.now()
+    definitions = {d.key: d.parsed for d in ConnectorDefinition.objects.latest()}
+    due = []
+    for account in PlatformAccount.objects.enabled().order_by("id"):
+        spec = definitions.get(account.connector_key)
+        hours = next(
+            (
+                s.every_hours
+                for s in (spec.schedules if spec else [])
+                if s.operation == "test_connection"
+            ),
+            None,
+        )
+        if hours is None:
+            continue
+        checked = account.health_checked_at
+        if checked is None or checked <= now - timedelta(hours=hours):
+            due.append(account.id)
     return due

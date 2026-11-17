@@ -34,7 +34,8 @@ function Integrations() {
     <div className="mx-auto w-full max-w-5xl p-4 md:p-8">
       <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
       <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-        Connect your company's own provider accounts. Feasibility runs use the products they offer.
+        Your company's provider connections, through its own accounts or Telejects'. Feasibility
+        runs use the products they offer.
       </p>
 
       <section className="mt-8">
@@ -59,7 +60,8 @@ function Integrations() {
                           <HealthBadge connection={connection} />
                         </div>
                         <p className="truncate text-sm text-muted-foreground">
-                          {connection.connector_name} ·{" "}
+                          {connection.connector_name}
+                          {connection.credentials === "platform" && " · Telejects account"} ·{" "}
                           <span className="tabular-nums">{connection.product_count}</span> products
                           {connection.health_error ? ` · ${connection.health_error}` : ""}
                         </p>
@@ -96,7 +98,10 @@ function Integrations() {
                   .map((c) => (c === "feasibility" ? "Feasibility" : c))
                   .join(", ")}
               </p>
-              {canManage && (
+              {connector.included && (
+                <p className="mt-2 text-xs font-medium text-primary">Included: Telejects account</p>
+              )}
+              {canManage && !connector.included && (
                 <Button
                   className="mt-3 self-start"
                   variant="outline"

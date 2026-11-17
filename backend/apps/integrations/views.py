@@ -33,7 +33,8 @@ class ConnectorViewSet(viewsets.ViewSet):
     permission_classes = [InRealm, HasRealmPermission("integrations.view")]
 
     def list(self, request):
-        return Response([connector_data(d) for d in services.available_definitions()])
+        granted = services.granted_connectors(request.realm)
+        return Response([connector_data(d, granted) for d in services.available_definitions()])
 
 
 class ConnectionViewSet(RealmScopedMixin, viewsets.ModelViewSet):

@@ -18,16 +18,19 @@ export function ConnectionForm({
   submitLabel,
   onSubmit,
   onCancel,
+  initialName,
 }: {
   connector: Connector;
   connection: Connection | null;
+  /** The name to start from when there's no connection to take it from. */
+  initialName?: string;
   pending: boolean;
   error: Error | null;
   submitLabel: string;
   onSubmit: (name: string, fields: Record<string, string>) => void;
   onCancel?: () => void;
 }) {
-  const [name, setName] = useState(connection?.name ?? connector.name);
+  const [name, setName] = useState(connection?.name ?? initialName ?? connector.name);
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       connector.fields.map((f) => [

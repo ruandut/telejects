@@ -12,7 +12,10 @@ Specs so far:
   each provider is a **connector definition as data** (`apps/integrations/definitions/*.json`,
   schema in `spec.py`), run by one engine. Add a provider with a definition, not code; a Python
   connector (`apps/integrations/connectors/`) is the escape hatch only for one a definition can't
-  describe. Companies connect their own provider accounts; secrets are encrypted at rest.
+  describe. Secrets are encrypted at rest.
+- **0004 Telejects' provider accounts**: staff grant chosen companies Telejects' own provider
+  accounts (Django admin or `manage.py grant_platform_account`); a company can switch to its own
+  account and back. Everyone on one platform account shares its provider limits.
 - **Next:** Herotel and Link Africa (definitions only), then single-site feasibility from a map.
 - **Later: client API access.** An Integrations section where a company creates API clients and
   works with a public, versioned API directly, feasibilities first. OAuth2 client credentials
@@ -108,8 +111,11 @@ companies is the worst bug this system can have.
   endpoint, never taken from a `NOTIFY` payload: events carry ids, the consumer reads. Access is
   rechecked before sending, so someone removed or downgraded stops receiving. Every consumer gets
   isolation tests like an endpoint.
-- Connectors (spec 0003) are no exception: provider credentials, requests and results belong to
-  a company.
+- Connectors (specs 0003, 0004) are no exception: requests and results always belong to a
+  company. Credentials belong to the company, or to the platform when staff have granted the
+  company one of Telejects' accounts (`PlatformAccount` through a `PlatformGrant`). A company
+  never sees a platform account's settings or secrets, and only
+  `integrations.services.credentials_of` decides whose credentials a call uses.
 - **Per-project access is coming** (board-based, like monday.com): a guest from outside, such as
   a customer following their own project, sees only the projects granted to them. Belonging to
   a realm will not mean seeing all its projects. Once projects exist, every project-owned query

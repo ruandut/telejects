@@ -47,3 +47,15 @@ class SyncRunQuerySet(TenantQuerySet):
 
     def last_of(self, connection, kind: str):
         return self.filter(connection=connection, kind=kind).recent().first()
+
+
+class PlatformAccountQuerySet(models.QuerySet):
+    """Telejects' own provider accounts: platform data, kept by staff, never listed to a company."""
+
+    def enabled(self):
+        return self.filter(enabled=True)
+
+
+class PlatformGrantQuerySet(TenantQuerySet):
+    def of_account(self, account):
+        return self.filter(account=account)

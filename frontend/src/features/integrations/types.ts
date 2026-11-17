@@ -9,6 +9,8 @@ export type ConnectorField = {
 /** A provider the company can connect, as its connector definition describes it. */
 export type Connector = {
   key: string;
+  /** The company may use Telejects' own account for this provider (granted by staff). */
+  included: boolean;
   name: string;
   description: string;
   capabilities: string[];
@@ -36,6 +38,10 @@ export type Connection = {
   name: string;
   connector_key: string;
   connector_name: string;
+  /** "platform": through Telejects' account, whose settings and secrets are never shown. */
+  credentials: "own" | "platform";
+  /** Telejects' account is granted for this provider, so the connection can switch to it. */
+  can_use_platform: boolean;
   settings: Record<string, string>;
   secrets_set: string[];
   enabled: boolean;

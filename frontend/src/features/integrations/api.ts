@@ -71,8 +71,12 @@ export function useConnect() {
 export function useUpdateConnection(id: number) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (changes: { name?: string; fields?: Record<string, string>; enabled?: boolean }) =>
-      api<Connection>(connectionPath(id), { method: "PATCH", body: JSON.stringify(changes) }),
+    mutationFn: (changes: {
+      name?: string;
+      fields?: Record<string, string>;
+      enabled?: boolean;
+      credentials?: "own" | "platform";
+    }) => api<Connection>(connectionPath(id), { method: "PATCH", body: JSON.stringify(changes) }),
     onSuccess: (connection) => {
       toast.success(`${connection.name} saved`);
       void client.invalidateQueries({ queryKey: ROOT });

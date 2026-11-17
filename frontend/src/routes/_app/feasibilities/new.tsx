@@ -146,7 +146,7 @@ function NewRun() {
                         <span className="font-medium text-destructive tabular-nums">
                           {built.bad.length.toLocaleString("en-ZA")}
                         </span>{" "}
-                        rows will be left out:
+                        {built.bad.length === 1 ? "row" : "rows"} will be left out:
                       </>
                     )}
                   </p>

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { NoAccess } from "@/components/no-access";
 import { SettingsSection } from "@/components/settings-section";
@@ -20,7 +20,7 @@ import {
 } from "@/features/integrations/api";
 import { ConnectionForm } from "@/features/integrations/components/connection-form";
 import { HealthBadge } from "@/features/integrations/components/health-badge";
-import type { Connection, ProviderProduct } from "@/features/integrations/types";
+import type { Connection, Connector, ProviderProduct } from "@/features/integrations/types";
 import { usePermission } from "@/features/realms/permissions";
 import { ApiError } from "@/network/errors";
 
@@ -112,31 +112,33 @@ function Loaded({ connection }: { connection: Connection }) {
 
       {canManage && connector && (
         <SettingsSection
-          title="Settings"
-          description={`What ${connector.name} needs. Changing the credentials tests them again.`}
+          title="Account"
+          description={
+            connection.credentials === "platform"
+              ? `Uses Telejects' ${connector.name} account. You can use your company's own instead.`
+              : `Your company's own ${connector.name} account. Changing the credentials tests them again.`
+          }
         >
-          <ConnectionForm
-            key={connection.id}
-            connector={connector}
+          <Credentials
+            key={`${connection.id}-${connection.credentials}`}
             connection={connection}
-            pending={update.isPending}
-            error={update.error}
-            submitLabel="Save"
-            onSubmit={(name, fields) =>
-              update.mutate({
-                name,
-                fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== "")),
-              })
-            }
+            connector={connector}
+            update={update}
           />
           <div className="mt-6 flex flex-wrap gap-2 border-t pt-4">
-            <Button
-              variant="outline"
-              onClick={() => update.mutate({ enabled: !connection.enabled })}
-              disabled={update.isPending}
-            >
-              {connection.enabled ? "Turn off" : "Turn on"}
-            </Button>
+            {/* A platform connection whose grant was withdrawn comes back through a new grant,
+                or by switching to our own account above. */}
+            {(connection.enabled ||
+              connection.credentials === "own" ||
+              connection.can_use_platform) && (
+              <Button
+                variant="outline"
+                onClick={() => update.mutate({ enabled: !connection.enabled })}
+                disabled={update.isPending}
+              >
+                {connection.enabled ? "Turn off" : "Turn on"}
+              </Button>
+            )}
             <Button
               variant="outline"
               className="text-destructive"
@@ -164,6 +166,82 @@ function Loaded({ connection }: { connection: Connection }) {
       <Products id={connection.id} />
       <Syncs id={connection.id} />
     </>
+  );
+}
+
+type Update = ReturnType<typeof useUpdateConnection>;
+
+/**
+ * Whose account the connection uses (0004). Through Telejects' account there is nothing to
+ * edit; switching to the company's own asks for the connector's fields. Switching back deletes
+ * the company's saved credentials.
+ */
+function Credentials({
+  connection,
+  connector,
+  update,
+}: {
+  connection: Connection;
+  connector: Connector;
+  update: Update;
+}) {
+  const [switching, setSwitching] = useState(false);
+  const platform = connection.credentials === "platform";
+  const keepFilled = (fields: Record<string, string>) =>
+    Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== ""));
+
+  if (platform && !switching) {
+    return (
+      <div className="grid gap-3 text-sm">
+        <p>
+          <Badge variant="secondary">Telejects account</Badge>
+        </p>
+        <p className="text-muted-foreground">
+          Telejects looks after these credentials. Runs use them without you entering anything.
+        </p>
+        <Button variant="outline" className="justify-self-start" onClick={() => setSwitching(true)}>
+          Use our own account instead
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-4">
+      <ConnectionForm
+        connector={connector}
+        connection={platform ? null : connection}
+        initialName={connection.name.replace(/ \(Telejects account( \d+)?\)$/, "")}
+        pending={update.isPending}
+        error={update.error}
+        submitLabel={platform ? "Use our account" : "Save"}
+        onCancel={platform ? () => setSwitching(false) : undefined}
+        onSubmit={(name, fields) =>
+          update.mutate(
+            platform
+              ? { name, credentials: "own", fields: keepFilled(fields) }
+              : { name, fields: keepFilled(fields) },
+          )
+        }
+      />
+      {!platform && connection.can_use_platform && (
+        <Button
+          variant="outline"
+          className="justify-self-start"
+          disabled={update.isPending}
+          onClick={() => {
+            if (
+              !window.confirm(
+                "Use Telejects' account instead? Your saved credentials for this provider will be deleted.",
+              )
+            )
+              return;
+            update.mutate({ credentials: "platform" });
+          }}
+        >
+          Use Telejects' account instead
+        </Button>
+      )}
+    </div>
   );
 }
 

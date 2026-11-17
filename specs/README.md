@@ -25,3 +25,4 @@ new endpoint has its company-isolation tests, and `make test` and `make check` p
 | [0001](0001-user-management.md) | Companies and user management | Done |
 | [0002](0002-my-settings.md) | My settings: changing my password | Done |
 | [0003](0003-integrations-feasibilities.md) | Integrations and bulk feasibilities | Done |
+| [0004](0004-platform-provider-accounts.md) | Telejects' provider accounts, shared with chosen companies | Done |

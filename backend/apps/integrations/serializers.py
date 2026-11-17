@@ -5,13 +5,16 @@ from rest_framework import serializers
 
 from apps.realms.access import RealmScopedSerializer
 
+from . import services
 from .canonical import PRODUCT_TYPE_LABELS
 from .models import Connection, ConnectorDefinition, ProviderProduct, SyncRun
 
 
-def connector_data(definition: ConnectorDefinition) -> dict:
+def connector_data(definition: ConnectorDefinition, granted: set[str] = frozenset()) -> dict:
     spec = definition.parsed
     return {
+        # The company may use Telejects' account for this provider (0004).
+        "included": spec.key in granted,
         "key": spec.key,
         "name": spec.name,
         "description": spec.description,
@@ -48,8 +51,16 @@ class SyncRunSerializer(RealmScopedSerializer):
 
 
 class ConnectionSerializer(RealmScopedSerializer):
+    """A platform connection (0004) shows none of Telejects' account: no settings, no secrets,
+    and its health only as "connected" or "failing", in our words, not the provider's."""
+
     connector_name = serializers.SerializerMethodField()
+    settings = serializers.SerializerMethodField()
     secrets_set = serializers.SerializerMethodField()
+    health = serializers.SerializerMethodField()
+    health_error = serializers.SerializerMethodField()
+    health_checked_at = serializers.SerializerMethodField()
+    can_use_platform = serializers.SerializerMethodField()
     product_count = serializers.SerializerMethodField()
     last_sync = serializers.SerializerMethodField()
 
@@ -60,6 +71,8 @@ class ConnectionSerializer(RealmScopedSerializer):
             "name",
             "connector_key",
             "connector_name",
+            "credentials",
+            "can_use_platform",
             "settings",
             "secrets_set",
             "enabled",
@@ -81,8 +94,44 @@ class ConnectionSerializer(RealmScopedSerializer):
         definition = self._definitions().get(obj.connector_key)
         return definition.parsed.name if definition else obj.connector_key
 
+    def _granted(self) -> set[str]:
+        if "_granted" not in self.context:
+            realm = self.realm
+            self.context["_granted"] = services.granted_connectors(realm) if realm else set()
+        return self.context["_granted"]
+
+    def _account(self, obj):
+        """The platform account behind a platform connection, if it's still granted."""
+        return services.granted_account(obj) if obj.uses_platform else None
+
+    def get_can_use_platform(self, obj):
+        return obj.connector_key in self._granted()
+
+    def get_settings(self, obj):
+        return {} if obj.uses_platform else obj.settings
+
     def get_secrets_set(self, obj):
-        return sorted(obj.secret_keys_set)
+        return [] if obj.uses_platform else sorted(obj.secret_keys_set)
+
+    def get_health(self, obj):
+        if not obj.uses_platform:
+            return obj.health
+        account = self._account(obj)
+        return account.health if account else Connection.Health.FAILING
+
+    def get_health_error(self, obj):
+        if not obj.uses_platform:
+            return obj.health_error
+        account = self._account(obj)
+        if account is None:
+            return services.PLATFORM_UNAVAILABLE
+        return services.PLATFORM_FAILING if account.health == Connection.Health.FAILING else ""
+
+    def get_health_checked_at(self, obj):
+        if not obj.uses_platform:
+            return obj.health_checked_at
+        account = self._account(obj)
+        return account.health_checked_at if account else None
 
     def get_product_count(self, obj):
         return obj.products.filter(retired_at=None).count()
@@ -104,6 +153,8 @@ class UpdateConnectionSerializer(serializers.Serializer):
         child=serializers.CharField(allow_blank=True, max_length=1000), required=False
     )
     enabled = serializers.BooleanField(required=False)
+    # Switch between the company's own account and Telejects' (0004).
+    credentials = serializers.ChoiceField(choices=["own", "platform"], required=False)
 
 
 class ProviderProductSerializer(RealmScopedSerializer):

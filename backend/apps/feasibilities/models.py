@@ -9,7 +9,7 @@ from django.conf import settings
 from django.db import models
 
 from apps.integrations.canonical import PRODUCT_TYPE_LABELS, STATUS_LABELS, ProductType, Status
-from apps.integrations.models import Connection, ProviderProduct
+from apps.integrations.models import Connection, PlatformAccount, ProviderProduct
 from apps.realms.models import TenantModel
 
 from .querysets import (
@@ -109,6 +109,11 @@ class ProviderCheck(TenantModel):
     error_kind = models.CharField(max_length=20, blank=True)
     error = models.CharField(max_length=500, blank=True)
     definition_version = models.PositiveIntegerField(null=True, blank=True)
+    # Whose credentials the call used (0004): "own" or "platform", and which platform account.
+    credentials = models.CharField(max_length=10, blank=True)
+    platform_account = models.ForeignKey(
+        PlatformAccount, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
     duration_ms = models.PositiveIntegerField(null=True, blank=True)
     # What was sent and received, secrets redacted.
     calls = models.JSONField(default=list, blank=True)

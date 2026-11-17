@@ -248,7 +248,7 @@ def test_at_0003_18_providers_are_respected(api, realm, mtn_and_vodacom, provide
     limits = set(services.runtime_for(realm.id, list(checks.values_list("id", flat=True))).values())
     mtn_id = Connection.objects.in_realm(realm).get(name="MTN").id
     voda_id = Connection.objects.in_realm(realm).get(name="Vodacom").id
-    assert limits == {(mtn_id, 2, 30), (voda_id, 3, 60)}
+    assert limits == {(f"connection-{mtn_id}", 2, 30), (f"connection-{voda_id}", 3, 60)}
 
 
 def test_at_0003_18_hatchet_limits_each_connection():
@@ -257,11 +257,11 @@ def test_at_0003_18_hatchet_limits_each_connection():
     task = feasibility_check._task
     (concurrency,) = task.concurrency
     assert (concurrency.expression, concurrency.max_runs) == (
-        "string(input.connection_id)",
+        "input.limit_key",
         "input.max_concurrency",
     )
     (rate,) = task.rate_limits
-    assert "input.connection_id" in rate.key_expr
+    assert rate.key_expr == "input.limit_key"
     assert rate.limit_values_expr == "input.requests_per_minute"
 
 

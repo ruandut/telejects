@@ -212,8 +212,11 @@ def plan_run(realm_id: int, run_id: int) -> list[int]:
     return check_ids
 
 
-def runtime_for(realm_id: int, check_ids: list[int]) -> dict[int, tuple[int, int, int]]:
-    """check id -> (connection id, max concurrency, requests per minute), for Hatchet's limits."""
+def runtime_for(realm_id: int, check_ids: list[int]) -> dict[int, tuple[str, int, int]]:
+    """check id -> (limit key, max concurrency, requests per minute), for Hatchet's limits.
+
+    The key is the credentials' (Connection.limit_key): every company using one of Telejects'
+    platform accounts shares its limits, as the provider sees one account (0004)."""
     found = {}
     checks = ProviderCheck.objects.in_realm_id(realm_id).filter(id__in=check_ids)
     specs = {}
@@ -224,7 +227,7 @@ def runtime_for(realm_id: int, check_ids: list[int]) -> dict[int, tuple[int, int
             specs[key] = definition.parsed if definition else None
         spec = specs[key]
         found[check.id] = (
-            check.connection_id,
+            check.connection.limit_key,
             spec.max_concurrency if spec else 1,
             spec.requests_per_minute if spec else 30,
         )
@@ -276,6 +279,9 @@ def perform_check(realm_id: int, check_id: int) -> str:
     refs = [ProductRef(p.code, p.name) for p in products]
     started = time.monotonic()
     outcome, error, version = None, None, None
+    usage = integrations.usage_of(connection)
+    check.credentials = usage["credentials"]
+    check.platform_account_id = usage["platform_account_id"]
     try:
         connector, definition = integrations.connector_for(connection)
         version = definition.version
