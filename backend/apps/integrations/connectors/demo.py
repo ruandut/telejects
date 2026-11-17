@@ -54,18 +54,45 @@ def status_for(site: SiteQuery, code: str) -> Status:
 
 
 class DemoConnector:
-    def __init__(self, spec, settings: dict, secrets: dict):
+    def __init__(self, spec, settings: dict, secrets: dict, recorder=None):
         self.spec = spec
         self.settings = settings
+        self.recorder = recorder or (lambda record: None)
+
+    def _request(self, kind: str, **body) -> dict:
+        return {"method": "DEMO", "url": f"demo://{kind}", "headers": {}, "body": body}
 
     def list_products(self):
-        return list(PRODUCTS), [CallRecord(request={"demo": "products"})]
+        record = CallRecord(
+            request=self._request("products"),
+            status_code=200,
+            response=[{"code": p.code, "name": p.name} for p in PRODUCTS],
+            duration_ms=0,
+        )
+        self.recorder(record)
+        return list(PRODUCTS), [record]
 
     def check(self, sites: list[SiteQuery], products: list[ProductRef]) -> CheckOutcome:
+        started = time.monotonic()
         if DELAY_SECONDS:
             time.sleep(DELAY_SECONDS)
+        request = self._request(
+            "feasibility",
+            sites=[s.as_context() for s in sites],
+            products=[p.code for p in products],
+        )
         if sites and fails(sites[0]):
-            raise ConnectorError(ErrorKind.PROVIDER_DOWN, "(Demo: this call fails on purpose.)")
+            error = ConnectorError(ErrorKind.PROVIDER_DOWN, "(Demo: this call fails on purpose.)")
+            self.recorder(
+                CallRecord(
+                    request=request,
+                    status_code=503,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                    error_kind=error.kind,
+                    error=error.message,
+                )
+            )
+            raise error
         answers = [
             Answer(
                 site_ref=site.ref,
@@ -77,11 +104,18 @@ class DemoConnector:
             for product in products
         ]
         record = CallRecord(
-            request={"demo": "check", "sites": [s.ref for s in sites]},
-            response={"answers": len(answers)},
+            request=request,
+            response={
+                "answers": [
+                    {"site": a.site_ref, "product": a.product_code, "status": a.status}
+                    for a in answers
+                ]
+            },
             status_code=200,
+            duration_ms=int((time.monotonic() - started) * 1000),
         )
+        self.recorder(record)
         return CheckOutcome(answers=answers, calls=[record])
 
     def test_connection(self) -> None:
-        return None
+        self.list_products()

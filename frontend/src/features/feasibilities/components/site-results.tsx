@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import {
@@ -8,6 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+import { usePermission } from "@/features/realms/permissions";
 
 import type { RunProduct, Site } from "../types";
 import { ResultBadge, StateBadge } from "./status";
@@ -50,16 +53,30 @@ function Cell({ site, product }: { site: Site; product: RunProduct }) {
     return <StateBadge state="error" />;
   if (site.state === "pending") return <StateBadge state="pending" />;
   if (site.state === "cancelled") return <StateBadge state="cancelled" />;
-  return null;
+  // Answered, and nothing for this product can be delivered: only feasible results are kept.
+  return <ResultBadge status="not_available" label="Not available" />;
 }
 
 function Errors({ site }: { site: Site }): ReactNode {
+  const seesLogs = usePermission("integrations.logs");
   if (!site.errors.length) return null;
   return (
     <ul className="mt-1 grid gap-0.5 text-xs text-destructive">
       {site.errors.map((e) => (
         <li key={e.connection}>
           {e.connection_name}: {e.message}
+          {seesLogs && e.log !== null && (
+            <>
+              {" "}
+              <Link
+                to="/logs/$logId"
+                params={{ logId: String(e.log) }}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                See the request
+              </Link>
+            </>
+          )}
         </li>
       ))}
     </ul>

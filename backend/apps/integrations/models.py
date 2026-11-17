@@ -8,7 +8,7 @@ the syncs themselves) is a TenantModel.
 
 from functools import cached_property
 
-from django.conf import settings
+from django.conf import settings as django_settings
 from django.db import models
 
 from apps.realms.models import TenantModel
@@ -36,7 +36,11 @@ class ConnectorDefinition(models.Model):
     published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+        django_settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
     )
 
     objects = ConnectorDefinitionQuerySet.as_manager()
@@ -62,11 +66,10 @@ class Health(models.TextChoices):
 
 
 class Credentials(models.Model):
-    """A provider account's fields: the non-secret settings, and the secrets, encrypted."""
+    """A provider account and its health. Where its settings and secrets live depends on whose
+    account it is (see `settings` and `secrets` on each)."""
 
     connector_key = models.SlugField(max_length=50)
-    settings = models.JSONField(default=dict, blank=True)  # the non-secret fields
-    secrets_encrypted = models.TextField(blank=True)
     enabled = models.BooleanField(default=True)
     health = models.CharField(max_length=10, choices=Health.choices, default=Health.UNKNOWN)
     health_error = models.CharField(max_length=500, blank=True)
@@ -79,11 +82,11 @@ class Credentials(models.Model):
 
     @property
     def secrets(self) -> dict:
-        return crypto.decrypt(self.secrets_encrypted)
+        raise NotImplementedError
 
-    @secrets.setter
-    def secrets(self, values: dict) -> None:
-        self.secrets_encrypted = crypto.encrypt(values) if values else ""
+    @property
+    def settings(self) -> dict:
+        raise NotImplementedError
 
     @property
     def secret_keys_set(self) -> set[str]:
@@ -94,12 +97,29 @@ class Credentials(models.Model):
 
 
 class PlatformAccount(Credentials):
-    """Telejects' own account with a provider, kept by platform staff (0004). Companies granted
-    it connect through it, and never see its settings or secrets."""
+    """Telejects' own account with a provider (0004). Companies connect through it and never
+    see its settings or secrets.
+
+    It is configured in .env only: its secrets and settings are the `env_key` entry of
+    settings.INTEGRATIONS_PLATFORM_ACCOUNTS. A row exists for each provider whose secrets are
+    set there (services.ensure_platform_accounts). `available_to_all` offers it to every company,
+    active from the start; staff can turn that off and grant it per company instead.
+    """
 
     Health = Health
 
     name = models.CharField(max_length=100, unique=True)
+    env_key = models.SlugField(
+        max_length=50,
+        blank=True,
+        help_text="Which entry of INTEGRATIONS_PLATFORM_ACCOUNTS (settings, from .env) holds its "
+        "secrets and settings.",
+    )
+    available_to_all = models.BooleanField(
+        default=True,
+        help_text="Every company gets this provider through Telejects' account. Off: only "
+        "companies with a grant do.",
+    )
 
     objects = PlatformAccountQuerySet.as_manager()
 
@@ -108,6 +128,25 @@ class PlatformAccount(Credentials):
 
     def __str__(self):
         return self.name
+
+    def _entry(self) -> dict:
+        return django_settings.INTEGRATIONS_PLATFORM_ACCOUNTS.get(self.env_key, {})
+
+    @property
+    def secrets(self) -> dict:
+        return {k: v for k, v in self._entry().get("secrets", {}).items() if v}
+
+    @property
+    def settings(self) -> dict:
+        return {k: v for k, v in self._entry().get("settings", {}).items() if v}
+
+    @property
+    def configured(self) -> bool:
+        """Every secret its connector needs is set in .env."""
+        definition = self.definition()
+        if definition is None or self.env_key not in django_settings.INTEGRATIONS_PLATFORM_ACCOUNTS:
+            return False
+        return definition.parsed.secret_keys <= set(self.secrets)
 
 
 class PlatformGrant(TenantModel):
@@ -139,6 +178,10 @@ class Connection(Credentials, TenantModel):
         PLATFORM = "platform", "Telejects account"
 
     name = models.CharField(max_length=100)
+    # The company's own account: its settings, and its secrets encrypted with Fernet (crypto.py).
+    # Both empty on platform connections.
+    settings = models.JSONField(default=dict, blank=True)
+    secrets_encrypted = models.TextField(blank=True)
     credentials = models.CharField(max_length=10, choices=Source.choices, default=Source.OWN)
     # Set when `credentials` is platform. RESTRICT: an account in use is turned off, not deleted.
     platform_account = models.ForeignKey(
@@ -163,6 +206,14 @@ class Connection(Credentials, TenantModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def secrets(self) -> dict:
+        return crypto.decrypt(self.secrets_encrypted)
+
+    @secrets.setter
+    def secrets(self, values: dict) -> None:
+        self.secrets_encrypted = crypto.encrypt(values) if values else ""
 
     @property
     def uses_platform(self) -> bool:

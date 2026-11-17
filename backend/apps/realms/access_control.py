@@ -17,6 +17,7 @@ PERMISSIONS: dict[str, str] = {
     "users.manage": "Add, edit and remove users, and change their roles",
     "integrations.view": "See the company's provider connections and their products",
     "integrations.manage": "Connect providers, change their credentials, and test or sync them",
+    "integrations.logs": "See the requests made to providers and their answers",
     "feasibilities.view": "See feasibility runs and their results, and export them",
     "feasibilities.run": "Start, cancel and retry feasibility runs",
 }
@@ -37,7 +38,15 @@ SYSTEM_ROLES: dict[str, SystemRole] = {
         "Project manager",
         "Plans and runs projects. Can see the company's users and integrations, and run "
         "feasibilities.",
-        frozenset({"users.view", "integrations.view", "feasibilities.view", "feasibilities.run"}),
+        frozenset(
+            {
+                "users.view",
+                "integrations.view",
+                "integrations.logs",
+                "feasibilities.view",
+                "feasibilities.run",
+            }
+        ),
     ),
     "viewer": SystemRole("Viewer", "Read-only access.", frozenset({"feasibilities.view"})),
 }

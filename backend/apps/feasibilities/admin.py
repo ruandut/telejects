@@ -24,4 +24,4 @@ class FeasibilityRunAdmin(AcrossRealmsAdminMixin, admin.ModelAdmin):
 class ProviderCheckAdmin(AcrossRealmsAdminMixin, admin.ModelAdmin):
     list_display = ["id", "run", "connection", "status", "attempts", "error_kind", "duration_ms"]
     list_filter = ["status", "error_kind"]
-    readonly_fields = ["realm", "run", "connection", "sites", "calls"]
+    readonly_fields = ["realm", "run", "connection", "sites"]

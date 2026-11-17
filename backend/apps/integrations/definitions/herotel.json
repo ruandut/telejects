@@ -1,0 +1,54 @@
+{
+  "key": "herotel",
+  "name": "Herotel",
+  "description": "Herotel's coverage API: business fibre (on-net or near-net) and business wireless.",
+  "base_url": "https://coverage.herotel.com:8096",
+  "fields": [
+    {"key": "api_key", "label": "API key", "type": "secret", "help": "Issued by Herotel for the coverage API."}
+  ],
+  "auth": [{"field": "api_key", "location": "header", "name": "api-key"}],
+  "products": {
+    "static": [
+      {"code": "herotelbusiness", "name": "Herotel Business Fibre", "type": "fibre"},
+      {"code": "herotelfttbnearnet", "name": "Herotel FTTB Near Net", "type": "fibre"},
+      {"code": "herotelwirelessbusiness", "name": "Herotel Wireless Business", "type": "fixed_wireless"}
+    ],
+    "code": "code",
+    "name": "name",
+    "type_rules": [
+      {"when": "type == 'fibre'", "type": "fibre"},
+      {"when": "type == 'fixed_wireless'", "type": "fixed_wireless"}
+    ],
+    "default_type": "other"
+  },
+  "test_with": "feasibility",
+  "feasibility": {
+    "request": {
+      "method": "GET",
+      "path": "/api/Feasibility/HerotelOnly",
+      "query": {"latitude": "{{ site.latitude | string }}", "longitude": "{{ site.longitude | string }}"}
+    },
+    "batch_size": 1,
+    "timeout_seconds": 30,
+    "retries": 2,
+    "sites": "@",
+    "site_match": "single",
+    "answers": "OnNet_MapKey",
+    "product": "MapKey",
+    "variant_name": "NetworkOperatorName",
+    "status_rules": [
+      {"when": "MapKey == 'herotelbusiness'", "status": "available"},
+      {"when": "MapKey == 'herotelfttbnearnet'", "status": "near_net"},
+      {"when": "MapKey == 'herotelwirelessbusiness'", "status": "coverage_only"}
+    ],
+    "default_status": "not_available",
+    "absent_status": "not_available",
+    "note": "NetworkStatus"
+  },
+  "max_concurrency": 3,
+  "requests_per_minute": 60,
+  "schedules": [
+    {"operation": "sync_products", "every_hours": 24},
+    {"operation": "test_connection", "every_hours": 6}
+  ]
+}

@@ -42,8 +42,9 @@ a platform account's settings or secrets, and nothing else about it crosses betw
 
 ### Data
 - **`PlatformAccount`** (platform data, not a `TenantModel`; allowlisted with that reason):
-  connector key, name (e.g. "Telejects MTN"), settings, secrets encrypted with
-  `INTEGRATIONS_ENCRYPTION_KEYS`, enabled, health (as a connection's), created and updated.
+  connector key, name (e.g. "Telejects MTN"), settings, enabled, health (as a connection's),
+  created and updated. Its secrets are not in the database: they come from `.env` through
+  settings (decision 7).
   Several per connector are allowed (e.g. a second MTN account for a large customer).
 - **`PlatformGrant`** (`TenantModel`): a company may use one platform account. Unique per
   company and account. Created and withdrawn by staff only, in Django admin or with
@@ -173,10 +174,38 @@ Open until Ruan approves the spec:
    no detail from the provider.
 6. **Existing data:** none to migrate (0003 has only own connections), so all existing
    connections become `own`.
+7. **Platform secrets in `.env`** (decided by Ruan after the build; see 8 for settings): Telejects' own provider
+   keys are environment values (`PLATFORM_MTN_API_KEY`, `PLATFORM_VODACOM_AUTH_KEY`,
+   `PLATFORM_HEROTEL_API_KEY`, `PLATFORM_LINK_AFRICA_KEY`), read into
+   `INTEGRATIONS_PLATFORM_SECRETS`; a platform account names its entry with `secrets_key`.
+   Companies' own credentials stay in the database, encrypted with Fernet.
+8. **Every provider, active from the start** (decided by Ruan, 2026-11-17, replacing decision 1
+   for accounts configured in `.env`):
+   - Telejects' accounts are configured entirely in `.env`: secrets and settings
+     (`INTEGRATIONS_PLATFORM_ACCOUNTS`, from `PLATFORM_*`). A row per provider whose secrets
+     are all set is made by `ensure_platform_accounts`, run by `load_connectors` (`make
+     migrate`) and the hourly `integrations-due` job.
+   - Such an account is `available_to_all`: every company is connected to it from the start
+     (on creation, through a signal on `Realm`, and existing ones by `ensure_everywhere`).
+     Staff can turn `available_to_all` off; the account is then for granted companies only, as
+     decision 1 had it.
+   - The Integrations page shows a card per provider, saying whose account it uses, with the
+     override: "Use your own account" (the connector's form) and "Use Telejects' account" back.
+   - A provider whose `.env` key is removed becomes unavailable to companies on Telejects'
+     account; those with their own account carry on.
+   - Demo, where it's enabled, is offered the same way (it needs no credentials).
+   - Herotel and Link Africa were added from Rapid at the same time (connector definitions only).
 
 ## Implementation notes
 
-Built as approved, with decisions 3–6 as drafted.
+Built as approved, with decisions 3–6 as drafted. Decisions 7 and 8 came after, from Ruan:
+`PlatformAccount` keeps `env_key` and `available_to_all` and reads its secrets and settings
+from `.env` (migrations `integrations/0003`, `0004`); `services.ensure_platform_accounts`,
+`ensure_default_connections` and `ensure_everywhere`; the `Realm` signal in
+`integrations/apps.py`; `features/integrations/components/provider-card.tsx` and
+`own-account-dialog.tsx`; tests in `apps/integrations/test_defaults.py` (including Herotel's and
+Link Africa's mappings). Checked live: Vodacom, Herotel and Link Africa accept Telejects' keys
+and answer through the worker; MTN's host answers 503 to every request.
 
 - **Models (`apps/integrations/models.py`):**
   - An abstract `Credentials` base (connector key, settings, encrypted secrets, enabled,
@@ -203,8 +232,9 @@ Built as approved, with decisions 3–6 as drafted.
   - Connections show `credentials` and `can_use_platform`; connectors show `included`.
   - `PATCH` takes `credentials`.
 - **Staff:**
-  - Django admin for platform accounts: secrets are write-only JSON, the saved keys are listed,
-    and an action checks the credentials now.
+  - Django admin for platform accounts: settings and the `secrets_key` are edited there; the
+    secrets are not. It shows only whether `.env` has each one, and an action checks the
+    credentials now. (Migration `integrations/0003` dropped the encrypted column.)
   - Django admin for grants: saving grants, deleting withdraws.
   - `manage.py grant_platform_account <company> <account> [--withdraw]`.
 - **Portal:** connections say "Telejects account". The Account section offers "Use our own

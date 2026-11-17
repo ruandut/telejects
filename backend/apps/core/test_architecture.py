@@ -16,8 +16,9 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "accounts": {"core", "realms", "jobs"},
     "users": {"core", "accounts", "realms", "jobs"},
     # Domain apps.
-    "integrations": {"core", "accounts", "realms", "jobs"},
-    "feasibilities": {"core", "accounts", "realms", "jobs", "integrations"},
+    "integration_logs": {"core", "realms"},
+    "integrations": {"core", "accounts", "realms", "jobs", "integration_logs"},
+    "feasibilities": {"core", "accounts", "realms", "jobs", "integrations", "integration_logs"},
 }
 
 

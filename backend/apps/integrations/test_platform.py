@@ -29,15 +29,19 @@ PLATFORM_EMAIL = "feasibility@telejects.example"
 
 
 @pytest.fixture
-def account(db, connectors):
-    account = PlatformAccount(
-        name="Telejects MTN",
-        connector_key="mtn",
-        settings={"requestor_email": PLATFORM_EMAIL, "customer_name": "Telejects"},
+def account(db, connectors, settings):
+    """Telejects' MTN account. Its key comes from settings (.env in real life), not the database."""
+    settings.INTEGRATIONS_PLATFORM_ACCOUNTS = {
+        "mtn": {
+            "secrets": {"api_key": PLATFORM_KEY},
+            "settings": {"requestor_email": PLATFORM_EMAIL, "customer_name": "Telejects"},
+        },
+        "vodacom": {"secrets": {"auth_key": ""}, "settings": {"calling_system": ""}},
+    }
+    # Granted per company in these scenarios; test_defaults.py covers "every company".
+    return PlatformAccount.objects.create(
+        name="Telejects MTN", connector_key="mtn", env_key="mtn", available_to_all=False
     )
-    account.secrets = {"api_key": PLATFORM_KEY}
-    account.save()
-    return account
 
 
 @pytest.fixture
@@ -87,9 +91,12 @@ def test_at_0004_02_a_company_never_sees_telejects_credentials(api, realm, grant
         )
     body = connection_json(api, granted)
     assert body["settings"] == {} and body["secrets_set"] == []
-    # The recorded calls are redacted too.
-    calls = json.dumps([c.calls for c in ProviderCheck.objects.in_realm(realm)])
-    assert PLATFORM_KEY not in calls
+    # The integration log is redacted too, including Telejects' settings.
+    from apps.integration_logs.models import IntegrationLog
+
+    logged = json.dumps(list(IntegrationLog.objects.in_realm(realm).values()), default=str)
+    assert IntegrationLog.objects.in_realm(realm).exists()
+    assert PLATFORM_KEY not in logged and PLATFORM_EMAIL not in logged
     # And a platform connection's fields can't be edited.
     res = api.patch(
         f"/api/integrations/connections/{granted.id}/",
@@ -320,8 +327,24 @@ def test_the_database_refuses_a_platform_connection_without_an_account(realm):
         )
 
 
-def test_the_admin_keeps_platform_secrets_write_only(admin_client, account):
+def test_platform_secrets_come_from_settings_and_never_the_database(
+    admin_client, account, settings
+):
+    from django.db import connection as db
+
+    with db.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+            ["integrations_platformaccount"],
+        )
+        columns = {row[0] for row in cursor.fetchall()}
+    assert "secrets_encrypted" not in columns
+    assert account.secrets == {"api_key": PLATFORM_KEY}
+    # The admin says whether .env has each secret, never the value.
     res = admin_client.get(f"/admin/integrations/platformaccount/{account.id}/change/")
     assert res.status_code == 200
-    assert PLATFORM_KEY not in res.content.decode()
-    assert "api_key" in res.content.decode()  # which secrets are saved, not their values
+    page = res.content.decode()
+    assert PLATFORM_KEY not in page and "api_key: set" in page
+    # An empty value in .env means no Telejects account there: calls refuse with auth.
+    settings.INTEGRATIONS_PLATFORM_ACCOUNTS = {"mtn": {"secrets": {"api_key": ""}, "settings": {}}}
+    assert account.secrets == {} and not account.configured

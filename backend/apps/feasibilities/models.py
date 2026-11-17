@@ -115,8 +115,6 @@ class ProviderCheck(TenantModel):
         PlatformAccount, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     duration_ms = models.PositiveIntegerField(null=True, blank=True)
-    # What was sent and received, secrets redacted.
-    calls = models.JSONField(default=list, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
 

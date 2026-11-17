@@ -28,7 +28,7 @@ def connected_mtn(api, providers, **overrides):
 
 def test_at_0003_01_i_see_the_providers_i_can_connect(api, providers):
     connectors = api.get("/api/integrations/connectors/").json()
-    assert {c["key"] for c in connectors} == {"demo", "mtn", "vodacom"}
+    assert {c["key"] for c in connectors} == {"demo", "herotel", "link_africa", "mtn", "vodacom"}
     mtn = next(c for c in connectors if c["key"] == "mtn")
     assert mtn["name"] == "MTN Business" and mtn["description"]
     assert [(f["key"], f["type"]) for f in mtn["fields"]] == [

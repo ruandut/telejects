@@ -3,6 +3,7 @@ fields are set."""
 
 from rest_framework import serializers
 
+from apps.integration_logs.models import IntegrationLog
 from apps.realms.access import RealmScopedSerializer
 
 from . import services
@@ -34,6 +35,9 @@ def connector_data(definition: ConnectorDefinition, granted: set[str] = frozense
 
 
 class SyncRunSerializer(RealmScopedSerializer):
+    # The sync's last log entry, while the log still keeps it (0005).
+    log = serializers.SerializerMethodField()
+
     class Meta:
         model = SyncRun
         fields = [
@@ -46,8 +50,18 @@ class SyncRunSerializer(RealmScopedSerializer):
             "added",
             "retired",
             "error",
+            "log",
         ]
         read_only_fields = fields
+
+    def get_log(self, obj):
+        return (
+            IntegrationLog.objects.in_realm(obj.realm_id)
+            .filter(sync_id=obj.id)
+            .newest()
+            .values_list("id", flat=True)
+            .first()
+        )
 
 
 class ConnectionSerializer(RealmScopedSerializer):
@@ -125,7 +139,10 @@ class ConnectionSerializer(RealmScopedSerializer):
         account = self._account(obj)
         if account is None:
             return services.PLATFORM_UNAVAILABLE
-        return services.PLATFORM_FAILING if account.health == Connection.Health.FAILING else ""
+        if account.health == Connection.Health.FAILING:
+            return services.PLATFORM_FAILING
+        # Checked, but not refused: the provider itself didn't answer (an outage, a 503).
+        return services.PLATFORM_NOT_ANSWERING if account.health_error else ""
 
     def get_health_checked_at(self, obj):
         if not obj.uses_platform:

@@ -72,9 +72,12 @@ def test_at_0003_09_i_check_a_list_of_sites(api, mtn_and_vodacom, providers):
         (voda_fibre, "Fibre"): "Available",
         (voda_fibre, "Fixed Wireless"): "Coverage only",
     }
-    store2 = {r["product"]: r["status_label"] for r in sites[1]["results"] if not r["variant_name"]}
-    assert store2[mtn_fibre] == "Not available"
+    # Only what can be delivered is kept: MTN said no at Store 2, so there's no MTN row, and the
+    # answered site reads as Not available (in the portal and the export).
+    assert mtn_fibre not in {r["product"] for r in sites[1]["results"]}
     assert all(s["state"] == "done" for s in sites)
+    export = api.get(f"/api/feasibilities/runs/{run['id']}/export/").content.decode()
+    assert "Store 2" in export and "Not available" in export
 
 
 def test_at_0003_10_bad_rows_are_shown_before_i_start(api, mtn_and_vodacom):
@@ -149,8 +152,10 @@ def test_at_0003_14_one_provider_failing_doesnt_stop_the_run(api, mtn_and_vodaco
             "connection": store2["errors"][0]["connection"],
             "connection_name": "Vodacom",
             "message": "The provider's service is unavailable. (HTTP 503)",
+            "log": store2["errors"][0]["log"],
         }
     ]
+    assert store2["errors"][0]["log"] is not None
     assert {r["product"] for r in store2["results"]} == {chosen[0]}
     # It was retried before giving up.
     calls = [c for c in providers.vodacom.feasibility_calls if c["latitude"] == "-33.9"]
@@ -271,9 +276,8 @@ def test_at_0003_19_results_dont_change_after_a_run(api, realm, mtn_and_vodacom,
     before = sites_of(api, first["id"])
     providers.mtn.not_feasible.update({"-26.1", "-33.9", "-29.85"})
     second = start_run(api, chosen, rows(*SITES), name="Again").json()
-    assert {r["status"] for s in sites_of(api, second["id"]) for r in s["results"]} == {
-        "not_available"
-    }
+    second_sites = sites_of(api, second["id"])
+    assert all(s["state"] == "done" and s["results"] == [] for s in second_sites)
     providers.mtn.products = ["Business LTE"]
     from apps.integrations.services import run_operation
 
@@ -350,11 +354,20 @@ def test_at_0003_24_the_demo_connector_runs_without_a_provider(api, realm):
     assert [summary(s) for s in sites] == [summary(s) for s in sites_of(api, again["id"])]
 
 
+def test_only_feasible_answers_are_stored(api, realm, mtn_and_vodacom, providers):
+    providers.mtn.not_feasible.add("-33.9")
+    start_run(api, picks(mtn_and_vodacom, "Business Fibre 100", "Business Fibre"), rows(*SITES))
+    statuses = set(FeasibilityResult.objects.in_realm(realm).values_list("status", flat=True))
+    assert statuses == {"available", "coverage_only"}
+
+
 def test_recorded_calls_never_hold_a_secret(api, realm, mtn_and_vodacom):
     start_run(api, picks(mtn_and_vodacom, "Business LTE", "Business Internet LTE"), rows(*SITES))
-    calls = json.dumps([c.calls for c in ProviderCheck.objects.in_realm(realm)])
-    assert MTN_KEY not in calls and "invented-voda-key" not in calls
-    assert "[redacted]" in calls
+    from apps.integration_logs.models import IntegrationLog
+
+    logged = json.dumps(list(IntegrationLog.objects.in_realm(realm).values()), default=str)
+    assert MTN_KEY not in logged and "invented-voda-key" not in logged
+    assert "[redacted]" in logged
 
 
 def test_a_retired_product_cant_start_a_run(api, realm, mtn_and_vodacom):

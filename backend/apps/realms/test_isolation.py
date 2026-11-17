@@ -54,6 +54,8 @@ COMPANY_ROUTES = [
     "/api/integrations/connections/",
     "/api/feasibilities/runs/",
     "/api/feasibilities/runs/products/",
+    "/api/integration-logs/",
+    "/api/integration-logs/limits/",
 ]
 
 
@@ -250,6 +252,9 @@ def test_roles_are_read_only(api, realm):
         "/api/feasibilities/runs/1/sites/",
         "/api/feasibilities/runs/1/export/",
         "/api/feasibilities/runs/products/",
+        "/api/integration-logs/",
+        "/api/integration-logs/1/",
+        "/api/integration-logs/limits/",
     ],
 )
 def test_signed_out_requests_are_refused(db, path):
@@ -747,3 +752,26 @@ async def test_a_run_event_travels_through_postgres_to_the_socket(settings, monk
         task = listener.ensure_listening()
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+# --- integration logs (0005) --------------------------------------------------------------------
+
+
+def test_at_0005_12_another_companys_logs_stay_out_of_sight(api, realm, blue_feasibility):
+    from apps.integration_logs.models import IntegrationLog
+
+    theirs = IntegrationLog.objects.in_realm(blue_feasibility["realm"])
+    assert theirs.exists()
+    listed = api.get("/api/integration-logs/").json()
+    assert listed["count"] == 0
+    assert api.get("/api/integration-logs/", {"search": "Blue"}).json()["count"] == 0
+    assert (
+        api.get("/api/integration-logs/", {"run": blue_feasibility["run_id"]}).json()["count"] == 0
+    )
+    assert api.get("/api/integration-logs/limits/").json()["kept"] == 0
+    entry = theirs.first()
+    foreign = api.get(f"/api/integration-logs/{entry.id}/")
+    missing = api.get("/api/integration-logs/999999/")
+    assert foreign.status_code == 404
+    assert (foreign.status_code, foreign.json()) == (missing.status_code, missing.json())
+    assert "Blue" not in foreign.content.decode()

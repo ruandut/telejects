@@ -19,6 +19,8 @@ import { Route as AppFeasibilitiesRunIdRouteImport } from './routes/_app/feasibi
 import { Route as AppFeasibilitiesNewRouteImport } from './routes/_app/feasibilities/new'
 import { Route as AppIntegrationsIndexRouteImport } from './routes/_app/integrations/index'
 import { Route as AppIntegrationsConnectionIdRouteImport } from './routes/_app/integrations/$connectionId'
+import { Route as AppLogsIndexRouteImport } from './routes/_app/logs/index'
+import { Route as AppLogsLogIdRouteImport } from './routes/_app/logs/$logId'
 import { Route as AppUsersIndexRouteImport } from './routes/_app/users/index'
 
 const AppRoute = AppRouteImport.update({
@@ -71,6 +73,16 @@ const AppIntegrationsConnectionIdRoute =
     path: '/integrations/$connectionId',
     getParentRoute: () => AppRoute,
   } as any)
+const AppLogsIndexRoute = AppLogsIndexRouteImport.update({
+  id: '/logs/',
+  path: '/logs/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLogsLogIdRoute = AppLogsLogIdRouteImport.update({
+  id: '/logs/$logId',
+  path: '/logs/$logId',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppUsersIndexRoute = AppUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -84,9 +96,11 @@ export interface FileRoutesByFullPath {
   '/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
   '/feasibilities/new': typeof AppFeasibilitiesNewRoute
   '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
+  '/logs/$logId': typeof AppLogsLogIdRoute
   '/account/': typeof AppAccountIndexRoute
   '/feasibilities/': typeof AppFeasibilitiesIndexRoute
   '/integrations/': typeof AppIntegrationsIndexRoute
+  '/logs/': typeof AppLogsIndexRoute
   '/users/': typeof AppUsersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -96,9 +110,11 @@ export interface FileRoutesByTo {
   '/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
   '/feasibilities/new': typeof AppFeasibilitiesNewRoute
   '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
+  '/logs/$logId': typeof AppLogsLogIdRoute
   '/account': typeof AppAccountIndexRoute
   '/feasibilities': typeof AppFeasibilitiesIndexRoute
   '/integrations': typeof AppIntegrationsIndexRoute
+  '/logs': typeof AppLogsIndexRoute
   '/users': typeof AppUsersIndexRoute
 }
 export interface FileRoutesById {
@@ -110,9 +126,11 @@ export interface FileRoutesById {
   '/_app/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
   '/_app/feasibilities/new': typeof AppFeasibilitiesNewRoute
   '/_app/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
+  '/_app/logs/$logId': typeof AppLogsLogIdRoute
   '/_app/account/': typeof AppAccountIndexRoute
   '/_app/feasibilities/': typeof AppFeasibilitiesIndexRoute
   '/_app/integrations/': typeof AppIntegrationsIndexRoute
+  '/_app/logs/': typeof AppLogsIndexRoute
   '/_app/users/': typeof AppUsersIndexRoute
 }
 export interface FileRouteTypes {
@@ -124,9 +142,11 @@ export interface FileRouteTypes {
     | '/feasibilities/$runId'
     | '/feasibilities/new'
     | '/integrations/$connectionId'
+    | '/logs/$logId'
     | '/account/'
     | '/feasibilities/'
     | '/integrations/'
+    | '/logs/'
     | '/users/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -136,9 +156,11 @@ export interface FileRouteTypes {
     | '/feasibilities/$runId'
     | '/feasibilities/new'
     | '/integrations/$connectionId'
+    | '/logs/$logId'
     | '/account'
     | '/feasibilities'
     | '/integrations'
+    | '/logs'
     | '/users'
   id:
     | '__root__'
@@ -149,9 +171,11 @@ export interface FileRouteTypes {
     | '/_app/feasibilities/$runId'
     | '/_app/feasibilities/new'
     | '/_app/integrations/$connectionId'
+    | '/_app/logs/$logId'
     | '/_app/account/'
     | '/_app/feasibilities/'
     | '/_app/integrations/'
+    | '/_app/logs/'
     | '/_app/users/'
   fileRoutesById: FileRoutesById
 }
@@ -233,6 +257,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIntegrationsConnectionIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/logs/': {
+      id: '/_app/logs/'
+      path: '/logs'
+      fullPath: '/logs/'
+      preLoaderRoute: typeof AppLogsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/logs/$logId': {
+      id: '/_app/logs/$logId'
+      path: '/logs/$logId'
+      fullPath: '/logs/$logId'
+      preLoaderRoute: typeof AppLogsLogIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/users/': {
       id: '/_app/users/'
       path: '/users'
@@ -248,9 +286,11 @@ interface AppRouteChildren {
   AppFeasibilitiesRunIdRoute: typeof AppFeasibilitiesRunIdRoute
   AppFeasibilitiesNewRoute: typeof AppFeasibilitiesNewRoute
   AppIntegrationsConnectionIdRoute: typeof AppIntegrationsConnectionIdRoute
+  AppLogsLogIdRoute: typeof AppLogsLogIdRoute
   AppAccountIndexRoute: typeof AppAccountIndexRoute
   AppFeasibilitiesIndexRoute: typeof AppFeasibilitiesIndexRoute
   AppIntegrationsIndexRoute: typeof AppIntegrationsIndexRoute
+  AppLogsIndexRoute: typeof AppLogsIndexRoute
   AppUsersIndexRoute: typeof AppUsersIndexRoute
 }
 
@@ -259,9 +299,11 @@ const AppRouteChildren: AppRouteChildren = {
   AppFeasibilitiesRunIdRoute: AppFeasibilitiesRunIdRoute,
   AppFeasibilitiesNewRoute: AppFeasibilitiesNewRoute,
   AppIntegrationsConnectionIdRoute: AppIntegrationsConnectionIdRoute,
+  AppLogsLogIdRoute: AppLogsLogIdRoute,
   AppAccountIndexRoute: AppAccountIndexRoute,
   AppFeasibilitiesIndexRoute: AppFeasibilitiesIndexRoute,
   AppIntegrationsIndexRoute: AppIntegrationsIndexRoute,
+  AppLogsIndexRoute: AppLogsIndexRoute,
   AppUsersIndexRoute: AppUsersIndexRoute,
 }
 

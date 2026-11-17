@@ -1,0 +1,50 @@
+{
+  "key": "link_africa",
+  "name": "Link Africa",
+  "description": "Link Africa's fibre feasibility API (run by 28East): fibre availability for a bandwidth and term.",
+  "base_url": "https://api.linkafrica.28east.co.za",
+  "fields": [
+    {"key": "api_key", "label": "API key", "type": "secret", "help": "Issued by Link Africa (28East) for the feasibility API."},
+    {"key": "bandwidth_mbps", "label": "Bandwidth (Mbps)", "help": "The bandwidth asked about at every site, e.g. 20."},
+    {"key": "term_months", "label": "Term (months)", "help": "The contract term asked about, e.g. 24."}
+  ],
+  "auth": [{"field": "api_key", "location": "query", "name": "key"}],
+  "products": {
+    "static": [{"code": "link_africa_fibre", "name": "Link Africa Fibre"}],
+    "code": "code",
+    "name": "name",
+    "default_type": "fibre"
+  },
+  "test_with": "feasibility",
+  "feasibility": {
+    "request": {
+      "method": "GET",
+      "path": "/getfeasibility",
+      "query": {
+        "latitude": "{{ site.latitude | string }}",
+        "longitude": "{{ site.longitude | string }}",
+        "bandwidth": "{{ settings.bandwidth_mbps }}",
+        "term": "{{ settings.term_months }}"
+      }
+    },
+    "batch_size": 1,
+    "timeout_seconds": 30,
+    "retries": 2,
+    "sites": "@",
+    "site_match": "single",
+    "answers": "[@]",
+    "product": "`\"link_africa_fibre\"`",
+    "variant_name": "join(', ', products[].product || `[]`)",
+    "status_rules": [
+      {"when": "success && feasible", "status": "available"}
+    ],
+    "default_status": "not_available",
+    "absent_status": "not_available",
+    "bandwidths": "bandwidth"
+  },
+  "max_concurrency": 3,
+  "requests_per_minute": 60,
+  "schedules": [
+    {"operation": "test_connection", "every_hours": 6}
+  ]
+}

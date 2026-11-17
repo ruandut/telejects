@@ -54,7 +54,8 @@ export type Site = {
   longitude: number;
   state: SiteState;
   results: SiteResult[];
-  errors: { connection: number; connection_name: string; message: string }[];
+  /** Failed provider calls; `log` is the call's log entry while the log still keeps it. */
+  errors: { connection: number; connection_name: string; message: string; log: number | null }[];
 };
 
 export type SitePage = { count: number; page: number; page_size: number; results: Site[] };

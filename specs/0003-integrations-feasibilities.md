@@ -148,7 +148,10 @@ by the API. Raw answers are stored for debugging and re-mapping.
   connection. Status (`pending`, `done`, `failed`, `cancelled`), attempts, error kind and message,
   definition version, duration, raw answer.
 - **`FeasibilityResult`** (`TenantModel`): run site, provider product, variant, status,
-  bandwidths, note. Written once; a run's results never change after it completes.
+  bandwidths, note. Written once; a run's results never change after it completes. Only what can
+  be delivered is stored (available, near-net, coverage only): an answered site with no result
+  for a product reads as "Not available" (decided by Ruan after the live Vodacom run, where each
+  product came back with ~20 access media, most of them not feasible).
 
 The same coordinates appearing twice in a run are checked once and the answer applies to both
 sites.
@@ -393,7 +396,7 @@ without needing `integrations.view`.
 ### AT-0003-23 — Vodacom's answers become ours
 - Given recorded Vodacom answers
 - Then each access medium is its own result, `feasible`, `coverage` and `status` follow the
-  definition's rules (including the medium ids where coverage alone counts), and bandwidth
+  definition's rules, and bandwidth
   groupings become ranges
 
 ### AT-0003-24 — The Demo connector works without a provider
@@ -464,7 +467,9 @@ Built as approved, with decisions 6–12 as drafted and 13 as decided.
     added for Vodacom's access media), auth in a header, body or query, error rules, and
     redaction of secrets in every recorded call.
   - `definitions/`: `demo.json` (the Python escape hatch, `connectors/demo.py`), `mtn.json`
-    (batches of 20) and `vodacom.json` (the coverage-only medium list as a status rule).
+    (batches of 20) and `vodacom.json`. Rapid's workaround (coverage alone counts as available
+    for a fixed list of access media) was a status rule in v1; Ruan turned it off in v2
+    (2026-11-17) until it's looked into again.
     `manage.py load_connectors` (also run by `make migrate`) saves a changed one as a new
     version; `manage.py check_connection <realm> <connection>` tests one live.
   - `crypto.py`: Fernet secrets from `INTEGRATIONS_ENCRYPTION_KEYS` (`init_env.sh` writes it,

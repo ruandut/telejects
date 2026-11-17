@@ -4,6 +4,7 @@ export type Permission =
   | "users.manage"
   | "integrations.view"
   | "integrations.manage"
+  | "integrations.logs"
   | "feasibilities.view"
   | "feasibilities.run";
 

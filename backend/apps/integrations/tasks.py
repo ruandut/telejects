@@ -61,10 +61,12 @@ def test_platform_account(input: PlatformAccountInput, ctx: Context) -> dict:
 def integrations_due(input: EmptyModel, ctx: Context) -> dict:
     """Start every scheduled sync and check that is due, each in its own company, and the
     credential checks of Telejects' platform accounts, once each."""
-    from .services import due_operations, due_platform_checks
+    from .services import due_operations, due_platform_checks, ensure_everywhere
 
     close_old_connections()
     try:
+        # New keys in .env, or a company created without its providers: connect them.
+        ensure_everywhere()
         due = due_operations()
         accounts = due_platform_checks()
     finally:

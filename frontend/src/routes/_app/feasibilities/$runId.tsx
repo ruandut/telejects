@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Download, RotateCcw, Square } from "lucide-react";
+import { ArrowLeft, Download, RotateCcw, ScrollText, Square } from "lucide-react";
 import { useState } from "react";
 
 import { NativeSelect } from "@/components/form";
@@ -63,6 +63,7 @@ function RunDetail({ id }: { id: number }) {
 
 function Loaded({ run }: { run: Run }) {
   const canRun = usePermission("feasibilities.run");
+  const seesLogs = usePermission("integrations.logs");
   const action = useRunAction(run.id);
   const exportRun = useExportRun(run.id);
   const [state, setState] = useState("");
@@ -102,6 +103,13 @@ function Loaded({ run }: { run: Run }) {
               onClick={() => action.mutate("retry-failed")}
             >
               <RotateCcw /> Retry failed
+            </Button>
+          )}
+          {seesLogs && (
+            <Button variant="outline" asChild>
+              <Link to="/logs" search={{ run: run.id }}>
+                <ScrollText /> Requests
+              </Link>
             </Button>
           )}
           <Button

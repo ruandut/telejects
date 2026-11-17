@@ -114,7 +114,13 @@ def test_admin_always_has_every_permission(realm, monkeypatch):
     [
         (
             "project_manager",
-            {"users.view", "integrations.view", "feasibilities.view", "feasibilities.run"},
+            {
+                "users.view",
+                "integrations.view",
+                "integrations.logs",
+                "feasibilities.view",
+                "feasibilities.run",
+            },
         ),
         ("viewer", {"feasibilities.view"}),
     ],

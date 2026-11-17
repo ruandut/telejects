@@ -294,6 +294,7 @@ const TRIGGER = { connect: "on connecting", manual: "by hand", scheduled: "sched
 
 function Syncs({ id }: { id: number }) {
   const syncs = useConnectionSyncs(id);
+  const seesLogs = usePermission("integrations.logs");
   return (
     <SettingsSection title="History" description="Recent tests and product syncs.">
       {!syncs.data ? (
@@ -314,6 +315,15 @@ function Syncs({ id }: { id: number }) {
               <span className="tabular-nums text-muted-foreground">
                 {when.format(new Date(sync.started_at))}
               </span>
+              {seesLogs && sync.log !== null && (
+                <Link
+                  to="/logs/$logId"
+                  params={{ logId: String(sync.log) }}
+                  className="text-xs text-primary underline-offset-4 hover:underline"
+                >
+                  See the request
+                </Link>
+              )}
               <span className="basis-full text-muted-foreground">
                 {sync.outcome === "running" ? (
                   "Running…"

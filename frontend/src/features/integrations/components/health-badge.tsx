@@ -6,5 +6,12 @@ export function HealthBadge({ connection }: { connection: Connection }) {
   if (!connection.enabled) return <Badge variant="outline">Off</Badge>;
   if (connection.health === "ok") return <Badge variant="secondary">Connected</Badge>;
   if (connection.health === "failing") return <Badge variant="destructive">Failing</Badge>;
+  // Checked, and the provider didn't answer (rather than refusing the credentials).
+  if (connection.health_checked_at && connection.health_error)
+    return (
+      <Badge variant="outline" className="border-brand-accent/60 text-brand-accent">
+        Not answering
+      </Badge>
+    );
   return <Badge variant="outline">Checking…</Badge>;
 }

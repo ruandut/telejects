@@ -18,7 +18,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.integrations import services as integrations
-from apps.integrations.canonical import ConnectorError, ErrorKind, ProductRef, SiteQuery
+from apps.integrations.canonical import ConnectorError, ErrorKind, ProductRef, SiteQuery, Status
 from apps.integrations.models import Connection, ProviderProduct
 from apps.realms import events
 from apps.realms.models import Realm
@@ -282,12 +282,16 @@ def perform_check(realm_id: int, check_id: int) -> str:
     usage = integrations.usage_of(connection)
     check.credentials = usage["credentials"]
     check.platform_account_id = usage["platform_account_id"]
+    recorder = integrations.recorder_for(
+        connection, "check_feasibility", run_id=check.run_id, check_id=check.id
+    )
     try:
-        connector, definition = integrations.connector_for(connection)
+        connector, definition = integrations.connector_for(connection, recorder)
         version = definition.version
         retries = definition.parsed.feasibility.retries if definition.parsed.feasibility else 0
         for attempt in range(retries + 1):
             check.attempts += 1
+            recorder.attempt = check.attempts
             try:
                 outcome = connector.check(queries, refs)
                 error = None
@@ -312,12 +316,16 @@ def perform_check(realm_id: int, check_id: int) -> str:
 
 @transaction.atomic
 def _succeed(check, outcome, by_ref, products, version, duration) -> None:
+    """Write what can be delivered: available, near-net or coverage only. A product (or variant)
+    the provider can't deliver gets no row, so a site that was answered and has no result for a
+    product reads as "Not available". Providers answer for far more than is wanted (Vodacom
+    lists every access medium of a product), and only what's feasible is worth keeping."""
     by_code = {p.code: p for p in products}
     results = []
     for answer in outcome.answers:
         product = by_code.get(answer.product_code)
         group = by_ref.get(answer.site_ref)
-        if product is None or group is None:
+        if product is None or group is None or answer.status == Status.NOT_AVAILABLE:
             continue
         for site in group:
             results.append(
@@ -340,10 +348,6 @@ def _succeed(check, outcome, by_ref, products, version, duration) -> None:
     check.definition_version = version
     check.duration_ms = duration
     check.finished_at = timezone.now()
-    check.calls = [
-        {"request": c.request, "status": c.status_code, "response": c.response}
-        for c in outcome.calls
-    ]
     check.save()
     _count(check, "checks_done")
 

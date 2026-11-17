@@ -129,6 +129,8 @@ def worker(monkeypatch, settings):
     monkeypatch.setattr(feasibilities, "_sleep", lambda seconds: None)
     monkeypatch.setattr(demo, "DELAY_SECONDS", 0)
     settings.INTEGRATIONS_DEMO_ENABLED = True
+    # No Telejects provider accounts unless a test sets them up: never the real keys in .env.
+    settings.INTEGRATIONS_PLATFORM_ACCOUNTS = {}
     return inline
 
 
@@ -156,6 +158,7 @@ class FakeMtn:
     def __init__(self, router):
         self.not_feasible: set[str] = set()  # latitudes (as sent) where nothing is feasible
         self.status = 200
+        self.not_json = False  # answer with HTML instead of JSON
         self.feasibility_calls = []
         router.get(MTN_URL).mock(side_effect=self._products)
         router.post(MTN_URL).mock(side_effect=self._check)
@@ -174,6 +177,8 @@ class FakeMtn:
 
         body = json.loads(request.content)
         self.feasibility_calls.append({"headers": dict(request.headers), "body": body})
+        if self.not_json:
+            return httpx.Response(200, text="<html>not json</html>")
         if self.status != 200:
             return httpx.Response(self.status, json={"error_message": "Refused"})
         outputs = []
@@ -203,6 +208,7 @@ class FakeVodacom:
 
     def __init__(self, router):
         self.down: set[str] = set()  # latitudes (as sent) that get a 503
+        self.slow: set[str] = set()  # latitudes (as sent) that time out
         self.status = 200
         self.feasibility_calls = []
         router.get(f"{VODACOM_URL}/api/Products").mock(side_effect=self._products)
@@ -222,6 +228,8 @@ class FakeVodacom:
         self.feasibility_calls.append(body)
         if self.status != 200:
             return httpx.Response(self.status, json={})
+        if body["latitude"] in self.slow:
+            raise httpx.ConnectTimeout("slow")
         if body["latitude"] in self.down:
             return httpx.Response(503, text="Service unavailable")
         answers = {

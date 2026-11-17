@@ -174,8 +174,9 @@ def test_at_0003_23_vodacoms_answers_become_ours():
     assert body["latitude"] == "-26.1"
     assert "callingBackUrl" not in body
     answers = {(a.product_code, a.variant_name): a for a in outcome.answers}
-    # LTE medium 3 is one where coverage alone counts.
-    assert answers[("3", "Mobile LTE")].status == Status.AVAILABLE
+    # Covered but not feasible: coverage only. (Rapid's workaround, which counted coverage alone
+    # as available for some media, is off for now.)
+    assert answers[("3", "Mobile LTE")].status == Status.COVERAGE_ONLY
     assert answers[("3", "Mobile LTE")].product_type == ProductType.LTE
     fibre = answers[("10", "Fibre")]
     assert (fibre.status, fibre.variant_code, fibre.product_type) == (

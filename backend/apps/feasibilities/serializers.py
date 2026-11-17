@@ -3,6 +3,7 @@ same serializers, so both always agree."""
 
 from rest_framework import serializers
 
+from apps.integration_logs.models import IntegrationLog
 from apps.integrations.canonical import PRODUCT_TYPE_LABELS, STATUS_LABELS
 from apps.integrations.models import ProviderProduct
 from apps.realms.access import RealmScopedInputSerializer, RealmScopedSerializer
@@ -119,11 +120,17 @@ class SiteSerializer(RealmScopedSerializer):
         ]
 
     def get_errors(self, obj):
+        """Failed calls, each with its last log entry while the log still keeps it (0005)."""
         return [
             {
                 "connection": c.connection_id,
                 "connection_name": c.connection.name,
                 "message": c.error,
+                "log": IntegrationLog.objects.in_realm(obj.realm_id)
+                .filter(check_id=c.id)
+                .newest()
+                .values_list("id", flat=True)
+                .first(),
             }
             for c in obj.checks.all()
             if c.status == ProviderCheck.Status.FAILED

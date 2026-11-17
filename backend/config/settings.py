@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "apps.jobs",
     "apps.users",
     # Domain apps go below, one per concern.
+    "apps.integration_logs",
     "apps.integrations",
     "apps.feasibilities",
 ]
@@ -138,8 +139,39 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 # Fernet keys that encrypt connections' provider secrets, newest first (comma-separated). No
 # default: without them a connection's credentials can't be stored or read.
 INTEGRATIONS_ENCRYPTION_KEYS = env.list("INTEGRATIONS_ENCRYPTION_KEYS")
-# Offer the Demo connector (a pretend provider). On for local development only.
+# Telejects' own provider accounts (0004), configured in .env only, never the database:
+# their secrets and their settings, per connector key. A provider whose secrets are all set here
+# is offered to every company, active from the start; companies can use their own account
+# instead, whose credentials are stored in the database, encrypted with the keys above.
+INTEGRATIONS_PLATFORM_ACCOUNTS = {
+    "mtn": {
+        "secrets": {"api_key": env("PLATFORM_MTN_API_KEY")},
+        "settings": {
+            "requestor_email": env("PLATFORM_MTN_REQUESTOR_EMAIL"),
+            "customer_name": env("PLATFORM_MTN_CUSTOMER_NAME"),
+        },
+    },
+    "vodacom": {
+        "secrets": {"auth_key": env("PLATFORM_VODACOM_AUTH_KEY")},
+        "settings": {"calling_system": env("PLATFORM_VODACOM_CALLING_SYSTEM")},
+    },
+    "herotel": {"secrets": {"api_key": env("PLATFORM_HEROTEL_API_KEY")}, "settings": {}},
+    "link_africa": {
+        "secrets": {"api_key": env("PLATFORM_LINK_AFRICA_KEY")},
+        "settings": {
+            "bandwidth_mbps": env("PLATFORM_LINK_AFRICA_BANDWIDTH_MBPS"),
+            "term_months": env("PLATFORM_LINK_AFRICA_TERM_MONTHS"),
+        },
+    },
+}
+# How many provider requests a company keeps in its integration log (0005), unless platform
+# staff set its own limit in Django admin.
+INTEGRATION_LOGS_DEFAULT_LIMIT = env.int("INTEGRATION_LOGS_DEFAULT_LIMIT")
+# Offer the Demo connector (a pretend provider). On for local development only. Where it's on,
+# it is offered like one of Telejects' accounts (it needs no credentials).
 INTEGRATIONS_DEMO_ENABLED = env.bool("INTEGRATIONS_DEMO_ENABLED", default=False)
+if INTEGRATIONS_DEMO_ENABLED:
+    INTEGRATIONS_PLATFORM_ACCOUNTS["demo"] = {"secrets": {}, "settings": {}}
 
 # --- Email -----------------------------------------------------------------
 # Without EMAIL_URL, mail is printed to the log of whichever process sends it (the Hatchet

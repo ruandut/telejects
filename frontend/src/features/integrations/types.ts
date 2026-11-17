@@ -28,6 +28,8 @@ export type SyncRun = {
   added: number;
   retired: number;
   error: string;
+  /** The sync's last log entry, while the log still keeps it. */
+  log: number | null;
 };
 
 export type Health = "unknown" | "ok" | "failing";

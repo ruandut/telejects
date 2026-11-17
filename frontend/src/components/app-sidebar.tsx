@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   MapPinned,
   Plug,
+  ScrollText,
   LogOut,
   UserCog,
   Users,
@@ -48,6 +49,7 @@ const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/feasibilities", label: "Feasibilities", icon: MapPinned, needs: "feasibilities.view" },
   { to: "/integrations", label: "Integrations", icon: Plug, needs: "integrations.view" },
+  { to: "/logs", label: "Logs", icon: ScrollText, needs: "integrations.logs" },
   { to: "/users", label: "User management", icon: Users, needs: "users.view" },
 ];
 

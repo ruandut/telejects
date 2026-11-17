@@ -13,10 +13,15 @@ Specs so far:
   schema in `spec.py`), run by one engine. Add a provider with a definition, not code; a Python
   connector (`apps/integrations/connectors/`) is the escape hatch only for one a definition can't
   describe. Secrets are encrypted at rest.
-- **0004 Telejects' provider accounts**: staff grant chosen companies Telejects' own provider
-  accounts (Django admin or `manage.py grant_platform_account`); a company can switch to its own
-  account and back. Everyone on one platform account shares its provider limits.
-- **Next:** Herotel and Link Africa (definitions only), then single-site feasibility from a map.
+- **0004 Telejects' provider accounts**: every provider Telejects has keys for in `.env` is
+  active for every company from the start (staff can limit an account to granted companies); a
+  company can use its own account instead, and switch back. Everyone on one platform account
+  shares its provider limits. Providers: Demo, MTN, Vodacom, Herotel, Link Africa.
+- **0005 Integration request logs**: every provider request and answer, secrets redacted, in
+  a Logs section; each company keeps its last `INTEGRATION_LOGS_DEFAULT_LIMIT` (5,000) unless
+  staff set its own in Django admin. Provider calls report to a `Recorder`
+  (`apps/integration_logs`); a new call site must pass one.
+- **Next:** single-site feasibility from a map.
 - **Later: client API access.** An Integrations section where a company creates API clients and
   works with a public, versioned API directly, feasibilities first. OAuth2 client credentials
   through django-oauth-toolkit: each API client belongs to a realm, its scopes are our
@@ -51,6 +56,9 @@ obvious from the code. `backend/CLAUDE.md` and `frontend/CLAUDE.md` hold each si
   with random secrets. Compose and Django both read that one file. A new setting gets a line in
   that script (a generated value, or an empty one) and is read through `env(...)` in settings.
 - Settings have no fallback for secrets. A missing `DJANGO_SECRET_KEY` must fail, not default.
+- Telejects' own provider accounts (spec 0004) live only in `.env` (`PLATFORM_*`: keys and
+  settings), read into `INTEGRATIONS_PLATFORM_ACCOUNTS` in settings; `init_env.sh` names them,
+  empty, and never holds a value. Only a company's own provider credentials go in the database, encrypted with Fernet.
 - Never print `.env` or read it into a conversation. To check a value, test for its presence or
   compare hashes.
 - Real customer data is as sensitive as secrets. Test fixtures are invented data only; real
@@ -113,7 +121,8 @@ companies is the worst bug this system can have.
   isolation tests like an endpoint.
 - Connectors (specs 0003, 0004) are no exception: requests and results always belong to a
   company. Credentials belong to the company, or to the platform when staff have granted the
-  company one of Telejects' accounts (`PlatformAccount` through a `PlatformGrant`). A company
+  company one of Telejects' accounts (`PlatformAccount` through a `PlatformGrant`, its secrets
+  from `.env`, never the database). A company
   never sees a platform account's settings or secrets, and only
   `integrations.services.credentials_of` decides whose credentials a call uses.
 - **Per-project access is coming** (board-based, like monday.com): a guest from outside, such as

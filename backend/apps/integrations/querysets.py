@@ -55,6 +55,9 @@ class PlatformAccountQuerySet(models.QuerySet):
     def enabled(self):
         return self.filter(enabled=True)
 
+    def for_everyone(self):
+        return self.filter(enabled=True, available_to_all=True)
+
 
 class PlatformGrantQuerySet(TenantQuerySet):
     def of_account(self, account):

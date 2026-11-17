@@ -17,6 +17,7 @@ from django.db.models import ProtectedError, RestrictedError
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.integration_logs.services import Recorder
 from apps.realms import events
 from apps.realms.models import Realm
 
@@ -102,19 +103,31 @@ def definition_for(key: str) -> ConnectorDefinition:
 
 PLATFORM_UNAVAILABLE = "Telejects' account for this provider isn't available to you any more."
 PLATFORM_FAILING = "Telejects' account for this provider is failing; we're on it."
+PLATFORM_NOT_ANSWERING = "The provider isn't answering right now; we'll keep trying."
+
+
+def _may_use(realm_id: int, account: PlatformAccount) -> bool:
+    """A company may use a Telejects account that is on, configured in .env, and offered to
+    everyone or granted to it."""
+    if not account.enabled or not account.configured:
+        return False
+    if account.available_to_all:
+        return True
+    return PlatformGrant.objects.in_realm_id(realm_id).of_account(account).exists()
 
 
 def granted_account(connection: Connection) -> PlatformAccount | None:
-    """The platform account a platform connection may use: granted to its company, and on."""
+    """The platform account a platform connection may use right now, if any."""
     if not connection.uses_platform:
         return None
-    granted = PlatformGrant.objects.in_realm(connection.realm_id).of_account(
-        connection.platform_account_id
-    )
     account = connection.platform_account
-    if not granted.exists() or not account.enabled:
-        return None
-    return account
+    return account if _may_use(connection.realm_id, account) else None
+
+
+def accounts_for(realm_id: int) -> list[PlatformAccount]:
+    """The Telejects accounts this company may use, oldest first."""
+    accounts = PlatformAccount.objects.enabled().order_by("id")
+    return [a for a in accounts if _may_use(realm_id, a)]
 
 
 def credentials_of(connection: Connection) -> PlatformAccount | Connection:
@@ -134,12 +147,40 @@ def usage_of(connection: Connection) -> dict:
     return {"credentials": "own", "platform_account_id": None}
 
 
-def connector_for(connection: Connection) -> tuple[Connector, ConnectorDefinition]:
+def recorder_for(connection: Connection, operation: str, **links) -> Recorder:
+    """Where a connection's provider calls are logged (0005), with what they belong to
+    (`run_id`, `check_id` or `sync_id`). For a platform connection, Telejects' settings are
+    hidden too: companies never see them."""
+    usage = usage_of(connection)
+    hide = []
+    if connection.uses_platform and connection.platform_account is not None:
+        hide = list(connection.platform_account.settings.values())
+    return Recorder(
+        realm_id=connection.realm_id,
+        operation=operation,
+        connection_id=connection.id,
+        connection_name=connection.name,
+        connector_key=connection.connector_key,
+        credentials=usage["credentials"],
+        hide=hide,
+        **links,
+    )
+
+
+def connector_for(
+    connection: Connection, recorder: Recorder | None = None
+) -> tuple[Connector, ConnectorDefinition]:
     definition = connection.definition()
     if definition is None:
         raise ConnectorError(ErrorKind.BAD_REQUEST, "Its connector is no longer offered.")
     owner = credentials_of(connection)
-    return build_connector(definition.parsed, owner.settings, owner.secrets), definition
+    if recorder is not None:
+        recorder.definition_version = definition.version
+        recorder.secret_header_names = {
+            a.name for a in definition.parsed.auth if a.location == "header"
+        }
+    connector = build_connector(definition.parsed, owner.settings, owner.secrets, recorder=recorder)
+    return connector, definition
 
 
 # --- connections ------------------------------------------------------------------------------
@@ -263,27 +304,79 @@ def update_connection(
 
 
 def _grant_for(connection: Connection) -> PlatformAccount:
-    """The granted, enabled platform account for this connection's provider, or a refusal that
-    looks the same whether no account exists or the company just isn't granted one."""
-    grant = (
-        PlatformGrant.objects.in_realm(connection.realm_id)
-        .filter(account__connector_key=connection.connector_key, account__enabled=True)
-        .select_related("account")
-        .order_by("id")
-        .first()
-    )
-    if grant is None:
-        raise ValidationError({"credentials": "Telejects' account isn't available for this."})
-    return grant.account
+    """The Telejects account this connection's company may use for its provider, or a refusal
+    that looks the same whether no account exists or the company just may not use it."""
+    for account in accounts_for(connection.realm_id):
+        if account.connector_key == connection.connector_key:
+            return account
+    raise ValidationError({"credentials": "Telejects' account isn't available for this."})
 
 
 def granted_connectors(realm: Realm) -> set[str]:
     """The connector keys this company may use Telejects' accounts for."""
-    return set(
-        PlatformGrant.objects.in_realm(realm)
-        .filter(account__enabled=True)
-        .values_list("account__connector_key", flat=True)
-    )
+    return {a.connector_key for a in accounts_for(realm.id)}
+
+
+# --- every provider, active from the start ------------------------------------------------------
+
+
+def ensure_platform_accounts() -> list[PlatformAccount]:
+    """A Telejects account for every provider configured in .env (its secrets all set) with a
+    published connector. Existing ones are kept as staff left them."""
+    definitions = {d.key: d for d in available_definitions()}
+    ready = []
+    for env_key in django_settings.INTEGRATIONS_PLATFORM_ACCOUNTS:
+        definition = definitions.get(env_key)
+        if definition is None:
+            continue
+        account = PlatformAccount.objects.filter(env_key=env_key).first()
+        if account is None:
+            # One made before accounts were keyed by .env entry adopts it.
+            account = PlatformAccount.objects.filter(connector_key=env_key, env_key="").first()
+            if account is None:
+                account = PlatformAccount(
+                    name=f"Telejects {definition.parsed.name}", connector_key=env_key
+                )
+            account.env_key = env_key
+            account.save()
+        if account.configured:
+            ready.append(account)
+    return ready
+
+
+@transaction.atomic
+def ensure_default_connections(realm: Realm) -> list[Connection]:
+    """Give the company a connection, through Telejects' account, to every provider it may use
+    and isn't connected to yet. Each is then tested and its products synced."""
+    created = []
+    for account in accounts_for(realm.id):
+        connections = Connection.objects.in_realm(realm)
+        if connections.filter(connector_key=account.connector_key).exists():
+            continue
+        definition = account.definition()
+        base = definition.parsed.name if definition else account.connector_key
+        name, n = base, 2
+        while connections.filter(name__iexact=name).exists():
+            name, n = f"{base} {n}", n + 1
+        connection = Connection.objects.create(
+            realm=realm,
+            name=name,
+            connector_key=account.connector_key,
+            credentials=Connection.Source.PLATFORM,
+            platform_account=account,
+        )
+        _schedule(connection, "connect", Trigger.CONNECT)
+        created.append(connection)
+    if created:
+        events.publish(realm.id, TOPIC)
+    return created
+
+
+def ensure_everywhere() -> int:
+    """Telejects' accounts from .env, and every company connected to them. Safe to re-run: run by
+    `make migrate` (load_connectors) and the hourly integrations job."""
+    ensure_platform_accounts()
+    return sum(len(ensure_default_connections(realm)) for realm in Realm.objects.order_by("id"))
 
 
 # --- grants (platform staff only: Django admin and manage.py) ----------------------------------
@@ -424,7 +517,8 @@ def test_connection(connection: Connection, trigger: str) -> bool:
     run = _start(connection, Kind.TEST_CONNECTION, trigger)
     error = None
     try:
-        connector, definition = connector_for(connection)
+        recorder = recorder_for(connection, Kind.TEST_CONNECTION, sync_id=run.id)
+        connector, definition = connector_for(connection, recorder)
         run.definition_version = definition.version
         connector.test_connection()
     except ConnectorError as failure:
@@ -437,7 +531,8 @@ def test_connection(connection: Connection, trigger: str) -> bool:
 def sync_products(connection: Connection, trigger: str) -> bool:
     run = _start(connection, Kind.SYNC_PRODUCTS, trigger)
     try:
-        connector, definition = connector_for(connection)
+        recorder = recorder_for(connection, Kind.SYNC_PRODUCTS, sync_id=run.id)
+        connector, definition = connector_for(connection, recorder)
         run.definition_version = definition.version
         found, _calls = connector.list_products()
     except ConnectorError as error:
@@ -549,6 +644,8 @@ def due_platform_checks(now=None) -> list[int]:
     definitions = {d.key: d.parsed for d in ConnectorDefinition.objects.latest()}
     due = []
     for account in PlatformAccount.objects.enabled().order_by("id"):
+        if not account.configured:
+            continue
         spec = definitions.get(account.connector_key)
         hours = next(
             (

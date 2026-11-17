@@ -212,6 +212,7 @@ def test_at_0001_15_i_pick_a_role_when_adding_someone(api, realm):
     assert [p["code"] for p in pm["permissions"]] == [
         "users.view",
         "integrations.view",
+        "integrations.logs",
         "feasibilities.view",
         "feasibilities.run",
     ]
@@ -247,6 +248,7 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
     assert me["realm"]["permissions"] == [
         "feasibilities.run",
         "feasibilities.view",
+        "integrations.logs",
         "integrations.manage",
         "integrations.view",
         "users.manage",
@@ -257,6 +259,7 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
     assert client_for(pm.user, realm).get("/api/auth/me/").json()["realm"]["permissions"] == [
         "feasibilities.run",
         "feasibilities.view",
+        "integrations.logs",
         "integrations.view",
         "users.view",
     ]

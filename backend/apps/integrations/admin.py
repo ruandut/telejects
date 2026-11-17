@@ -3,6 +3,7 @@
 import json
 
 from django import forms
+from django.conf import settings as django_settings
 from django.contrib import admin
 from pydantic import ValidationError
 
@@ -82,58 +83,54 @@ class SyncRunAdmin(AcrossRealmsAdminMixin, admin.ModelAdmin):
 # --- Telejects' own provider accounts (0004) ---------------------------------------------------
 
 
-class PlatformAccountForm(forms.ModelForm):
-    """Settings are shown; secrets are write-only: type new ones to replace them, as JSON."""
+def _env_keys():
+    return [(key, key) for key in sorted(django_settings.INTEGRATIONS_PLATFORM_ACCOUNTS)]
 
-    new_secrets = forms.JSONField(
-        required=False,
-        help_text='The secret fields, e.g. {"api_key": "…"}. Leave empty to keep the saved ones.',
-        widget=forms.Textarea(attrs={"rows": 3, "autocomplete": "off"}),
-    )
+
+class PlatformAccountForm(forms.ModelForm):
+    """Telejects' accounts are configured in .env (INTEGRATIONS_PLATFORM_ACCOUNTS); here staff
+    only name them, switch them on or off, and choose whether every company gets them."""
 
     class Meta:
         model = PlatformAccount
-        fields = ["name", "connector_key", "settings", "enabled"]
+        fields = ["name", "connector_key", "env_key", "enabled", "available_to_all"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["env_key"] = forms.ChoiceField(
+            choices=_env_keys(), help_text=self.fields["env_key"].help_text
+        )
 
     def clean(self):
         cleaned = super().clean()
         key = cleaned.get("connector_key")
-        definition = ConnectorDefinition.objects.latest_for(key) if key else None
-        if key and definition is None:
+        if key and ConnectorDefinition.objects.latest_for(key) is None:
             raise forms.ValidationError("There's no published connector with that key.")
-        if definition:
-            spec = definition.parsed
-            settings = cleaned.get("settings") or {}
-            unknown = set(settings) - spec.setting_keys
-            if unknown:
-                raise forms.ValidationError(f"Not settings of {spec.name}: {sorted(unknown)}")
-            secrets = cleaned.get("new_secrets") or {}
-            if secrets and set(secrets) - spec.secret_keys:
-                raise forms.ValidationError(
-                    f"Secret fields of {spec.name}: {sorted(spec.secret_keys)}"
-                )
         return cleaned
-
-    def save(self, commit=True):
-        account = super().save(commit=False)
-        if secrets := self.cleaned_data.get("new_secrets"):
-            account.secrets = {**account.secrets, **secrets}
-        if commit:
-            account.save()
-        return account
 
 
 @admin.register(PlatformAccount)
 class PlatformAccountAdmin(admin.ModelAdmin):
     form = PlatformAccountForm
-    list_display = ["name", "connector_key", "enabled", "health", "health_checked_at"]
-    list_filter = ["connector_key", "health", "enabled"]
-    readonly_fields = ["secrets_saved", "health", "health_error", "health_checked_at"]
+    list_display = ["name", "connector_key", "enabled", "available_to_all", "configured", "health"]
+    list_filter = ["connector_key", "health", "enabled", "available_to_all"]
+    readonly_fields = ["in_env", "health", "health_error", "health_checked_at"]
     actions = ["check_now"]
 
-    @admin.display(description="Secrets saved")
-    def secrets_saved(self, obj):
-        return ", ".join(sorted(obj.secret_keys_set)) or "None"
+    @admin.display(description="In .env")
+    def in_env(self, obj):
+        """Which of its fields .env sets, never the values."""
+        entry = django_settings.INTEGRATIONS_PLATFORM_ACCOUNTS.get(obj.env_key, {})
+        parts = [
+            f"{k}: {'set' if v else 'missing'}"
+            for group in ("secrets", "settings")
+            for k, v in sorted(entry.get(group, {}).items())
+        ]
+        return ", ".join(parts) or "Nothing (no such entry)"
+
+    @admin.display(boolean=True)
+    def configured(self, obj):
+        return obj.configured
 
     @admin.action(description="Check the credentials now")
     def check_now(self, request, queryset):

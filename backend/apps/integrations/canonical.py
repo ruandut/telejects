@@ -144,11 +144,16 @@ class Answer:
 
 @dataclass
 class CallRecord:
-    """What was sent and what came back, for debugging. Secrets are redacted before this."""
+    """One exchange with a provider: what was sent and what came back, secrets redacted.
+    Reported to the call's recorder, which writes it to the integration log (0005)."""
 
     request: dict = field(default_factory=dict)
     response: Any = None
     status_code: int | None = None
+    response_headers: dict = field(default_factory=dict)
+    duration_ms: int | None = None
+    error_kind: str = ""
+    error: str = ""
 
 
 @dataclass

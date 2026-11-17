@@ -18,6 +18,19 @@ if [ -f .env ]; then
       "INTEGRATIONS_ENCRYPTION_KEYS=$(fernet_key)" >> .env
     added="$added INTEGRATIONS_ENCRYPTION_KEYS"
   fi
+  for key in PLATFORM_MTN_API_KEY PLATFORM_MTN_REQUESTOR_EMAIL PLATFORM_MTN_CUSTOMER_NAME \
+    PLATFORM_VODACOM_AUTH_KEY PLATFORM_VODACOM_CALLING_SYSTEM PLATFORM_HEROTEL_API_KEY \
+    PLATFORM_LINK_AFRICA_KEY PLATFORM_LINK_AFRICA_BANDWIDTH_MBPS PLATFORM_LINK_AFRICA_TERM_MONTHS; do
+    if ! grep -q "^${key}=" .env; then
+      printf '%s\n' "${key}=" >> .env
+      added="$added $key"
+    fi
+  done
+  if ! grep -q '^INTEGRATION_LOGS_DEFAULT_LIMIT=' .env; then
+    printf '%s\n' "# Provider requests a company keeps in its integration log, unless staff set its own." \
+      "INTEGRATION_LOGS_DEFAULT_LIMIT=5000" >> .env
+    added="$added INTEGRATION_LOGS_DEFAULT_LIMIT"
+  fi
   if ! grep -q '^INTEGRATIONS_DEMO_ENABLED=' .env; then
     printf '%s\n' "# Offer the Demo connector (a pretend provider)." "INTEGRATIONS_DEMO_ENABLED=true" >> .env
     added="$added INTEGRATIONS_DEMO_ENABLED"
@@ -55,6 +68,19 @@ APP_URL=http://localhost:5184
 INTEGRATIONS_ENCRYPTION_KEYS=$(fernet_key)
 # Offer the Demo connector (a pretend provider).
 INTEGRATIONS_DEMO_ENABLED=true
+# Provider requests a company keeps in its integration log, unless staff set its own.
+INTEGRATION_LOGS_DEFAULT_LIMIT=5000
+# Telejects' own provider accounts (spec 0004). An empty key: no Telejects account with that
+# provider. Every company gets the providers whose keys are set, active from the start.
+PLATFORM_MTN_API_KEY=
+PLATFORM_MTN_REQUESTOR_EMAIL=
+PLATFORM_MTN_CUSTOMER_NAME=
+PLATFORM_VODACOM_AUTH_KEY=
+PLATFORM_VODACOM_CALLING_SYSTEM=
+PLATFORM_HEROTEL_API_KEY=
+PLATFORM_LINK_AFRICA_KEY=
+PLATFORM_LINK_AFRICA_BANDWIDTH_MBPS=
+PLATFORM_LINK_AFRICA_TERM_MONTHS=
 # The local sign-in that make seed creates.
 DEV_ADMIN_EMAIL=admin@example.com
 DEV_ADMIN_PASSWORD=$(rand 12)

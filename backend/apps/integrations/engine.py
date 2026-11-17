@@ -99,12 +99,15 @@ def build_connector(
     settings: dict,
     secrets: dict,
     client: httpx.Client | None = None,
+    recorder=None,
 ) -> Connector:
+    """`recorder`, when given, is called with every exchange (a CallRecord), whether it worked
+    or not, after secrets are redacted."""
     if spec.python:
         module_name, _, class_name = spec.python.rpartition(".")
         cls = getattr(importlib.import_module(module_name), class_name)
-        return cls(spec, settings, secrets)
-    return DefinedConnector(spec, settings, secrets, client)
+        return cls(spec, settings, secrets, recorder=recorder)
+    return DefinedConnector(spec, settings, secrets, client, recorder=recorder)
 
 
 class Redactor:
@@ -128,12 +131,23 @@ class Redactor:
 class DefinedConnector:
     """A provider described by its definition."""
 
-    def __init__(self, spec: ConnectorSpec, settings: dict, secrets: dict, client=None):
+    def __init__(
+        self, spec: ConnectorSpec, settings: dict, secrets: dict, client=None, recorder=None
+    ):
         self.spec = spec
         self.settings = dict(settings)
         self.secrets = dict(secrets)
         self.redact = Redactor(self.secrets)
         self.client = client or httpx.Client(follow_redirects=False)
+        self.recorder = recorder
+
+    def _report(self, record: CallRecord, started: float, error: ConnectorError | None = None):
+        record.duration_ms = int((time.monotonic() - started) * 1000)
+        if error is not None:
+            record.error_kind = error.kind
+            record.error = self.redact(error.message)
+        if self.recorder is not None:
+            self.recorder(record)
 
     # --- HTTP ------------------------------------------------------------------------------
 
@@ -171,6 +185,7 @@ class DefinedConnector:
                 }
             )
         )
+        started = time.monotonic()
         try:
             response = self.client.request(
                 template.method,
@@ -181,18 +196,28 @@ class DefinedConnector:
                 timeout=timeout,
             )
         except httpx.TimeoutException:
-            raise ConnectorError(ErrorKind.TIMEOUT) from None
+            error = ConnectorError(ErrorKind.TIMEOUT)
+            self._report(record, started, error)
+            raise error from None
         except httpx.HTTPError:
-            raise ConnectorError(ErrorKind.PROVIDER_DOWN) from None
+            error = ConnectorError(ErrorKind.PROVIDER_DOWN)
+            self._report(record, started, error)
+            raise error from None
         record.status_code = response.status_code
+        record.response_headers = self.redact(dict(response.headers))
         try:
             parsed = response.json()
         except ValueError:
             parsed = None
-        record.response = self.redact(parsed if parsed is not None else response.text[:2000])
-        self._raise_for(response.status_code, parsed)
-        if parsed is None:
-            raise ConnectorError(ErrorKind.BAD_RESPONSE, "It wasn't JSON.")
+        record.response = self.redact(parsed if parsed is not None else response.text)
+        try:
+            self._raise_for(response.status_code, parsed)
+            if parsed is None:
+                raise ConnectorError(ErrorKind.BAD_RESPONSE, "It wasn't JSON.")
+        except ConnectorError as error:
+            self._report(record, started, error)
+            raise
+        self._report(record, started)
         return parsed, record
 
     def _raise_for(self, status_code: int, body: Any) -> None:
