@@ -384,3 +384,51 @@ def test_deleting_a_company_takes_its_runs_and_connections(api, realm, mtn_and_v
     Realm.objects.filter(pk=realm.pk).delete()
     assert not Connection.objects.in_realm(realm.id).exists()
     assert not FeasibilityResult.objects.in_realm(realm.id).exists()
+
+
+def _run_of_many(api, realm, count):
+    assert connect(api, "demo", "Demo").status_code == 201
+    products = list(ProviderProduct.objects.in_realm(realm).values_list("id", flat=True))[:1]
+    many = [(f"Site {i:03}", -26 - i / 1000, 28) for i in range(count)]
+    return start_run(api, products, rows(*many)).json()["id"]
+
+
+def test_run_sites_come_twenty_to_a_page(api, realm):
+    run_id = _run_of_many(api, realm, 45)
+    path = f"/api/feasibilities/runs/{run_id}/sites/"
+    first = api.get(path).json()
+    assert (first["count"], first["page"], first["page_size"]) == (45, 1, 20)
+    assert [s["line_number"] for s in first["results"]] == list(range(2, 22))
+    last = api.get(path, {"page": 3}).json()
+    assert [s["name"] for s in last["results"]] == [f"Site {i:03}" for i in range(40, 45)]
+    # Past the end gives the last page; nonsense gives the first.
+    assert api.get(path, {"page": 9}).json()["page"] == 3
+    assert api.get(path, {"page": "x"}).json()["page"] == 1
+    assert api.get(path, {"page": 0}).json()["page"] == 1
+    assert first["previous"] is None and "page=2" in first["next"]
+
+
+def test_run_sites_page_size_is_one_of_the_offered_sizes(api, realm):
+    run_id = _run_of_many(api, realm, 45)
+    path = f"/api/feasibilities/runs/{run_id}/sites/"
+    for size, shown in [(50, 45), (100, 45), (200, 45), (20, 20)]:
+        page = api.get(path, {"page_size": size}).json()
+        assert (page["page_size"], len(page["results"])) == (size, shown)
+    for odd in [7, 1000, 0, -20, "all"]:
+        assert api.get(path, {"page_size": odd}).json()["page_size"] == 20
+
+
+def test_run_sites_pages_follow_the_search_and_filter(api, realm):
+    run_id = _run_of_many(api, realm, 45)
+    path = f"/api/feasibilities/runs/{run_id}/sites/"
+    found = api.get(path, {"search": "Site 03", "page_size": 50}).json()
+    assert found["count"] == 10
+    assert [s["name"] for s in found["results"]] == [f"Site {i:03}" for i in range(30, 40)]
+    found = api.get(path, {"search": "Site 0", "page": 2}).json()
+    assert (found["count"], found["page"], len(found["results"])) == (45, 2, 20)
+    states = {"done": 0, "error": 0}
+    for state in states:
+        page = api.get(path, {"state": state, "page_size": 200}).json()
+        states[state] = page["count"]
+        assert {s["state"] for s in page["results"]} <= {state}
+    assert states["done"] + states["error"] == 45

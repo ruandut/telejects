@@ -58,7 +58,14 @@ export type Site = {
   errors: { connection: number; connection_name: string; message: string; log: number | null }[];
 };
 
-export type SitePage = { count: number; page: number; page_size: number; results: Site[] };
+export type SitePage = {
+  count: number;
+  page: number;
+  page_size: number;
+  next: string | null;
+  previous: string | null;
+  results: Site[];
+};
 
 export type RowInput = {
   line_number: number;

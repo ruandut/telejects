@@ -464,13 +464,15 @@ def test_at_0003_25_another_companys_runs_stay_out_of_sight(api, realm, blue_fea
         api.get(path),
         api.get(f"{path}sites/"),
         api.get(f"{path}sites/", {"ids": "1,2,3"}),
+        api.get(f"{path}sites/", {"page": 2, "page_size": 200, "state": "done"}),
+        api.get(f"{path}sites/", {"search": "Blue", "page_size": 50}),
         api.get(f"{path}export/"),
         api.post(f"{path}cancel/"),
         api.post(f"{path}retry-failed/"),
         api.patch(path, {"name": "x"}, format="json"),
         api.delete(path),
     ]
-    assert [r.status_code for r in attempts] == [404] * 6 + [405, 405]
+    assert [r.status_code for r in attempts] == [404] * 8 + [405, 405]
     assert "Blue Depot" not in "".join(r.content.decode() for r in attempts)
     assert (
         FeasibilityRun.objects.in_realm(blue_feasibility["realm"]).get(pk=run_id).status == before

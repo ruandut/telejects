@@ -18,6 +18,7 @@ from apps.realms.permissions import HasRealmPermission, InRealm
 
 from . import services
 from .models import FeasibilityRun, RunSite
+from .pagination import SitePagination
 from .serializers import (
     RunListSerializer,
     RunProductSerializer,
@@ -25,8 +26,6 @@ from .serializers import (
     SiteSerializer,
     StartRunSerializer,
 )
-
-PAGE_SIZE = 100
 
 
 class RunViewSet(
@@ -84,32 +83,25 @@ class RunViewSet(
 
     @action(detail=True, methods=["get"])
     def sites(self, request, pk=None):
-        """The run's sites with their results: a page, or the ones a live event named (?ids=)."""
+        """The run's sites with their results: a page (?page=, ?page_size= of 20, 50, 100 or
+        200), or the ones a live event named (?ids=)."""
         run = self.get_object()
         sites = RunSite.objects.in_realm(request.realm).of_run(run)
         ids = request.query_params.get("ids")
         if ids:
-            wanted = [int(i) for i in ids.split(",") if i.strip().isdigit()][:PAGE_SIZE]
+            wanted = [int(i) for i in ids.split(",") if i.strip().isdigit()][
+                : SitePagination.max_page_size
+            ]
             sites = sites.filter(id__in=wanted)
         if state := request.query_params.get("state"):
             sites = sites.with_state(state)
         if search := request.query_params.get("search", "").strip():
             sites = sites.filter(name__icontains=search[:100])
-        count = sites.count()
-        try:
-            page = max(int(request.query_params.get("page", 1)), 1)
-        except ValueError:
-            page = 1
-        start = (page - 1) * PAGE_SIZE
-        rows = sites.with_results()[start : start + PAGE_SIZE]
+        paginator = SitePagination()
+        rows = paginator.paginate_queryset(sites.with_results(), request, view=self)
         context = self.get_serializer_context()
-        return Response(
-            {
-                "count": count,
-                "page": page,
-                "page_size": PAGE_SIZE,
-                "results": SiteSerializer(rows, many=True, context=context).data,
-            }
+        return paginator.get_paginated_response(
+            SiteSerializer(rows, many=True, context=context).data
         )
 
     @action(detail=True, methods=["get"])

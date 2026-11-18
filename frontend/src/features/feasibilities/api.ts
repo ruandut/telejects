@@ -9,7 +9,7 @@ import type { Run, RunProduct, Site, SitePage, StartRunInput } from "./types";
 const ROOT = ["feasibilities"];
 const runPath = (id: number) => `/api/feasibilities/runs/${id}/`;
 
-export type SiteFilters = { page: number; state: string; search: string };
+export type SiteFilters = { page: number; pageSize: number; state: string; search: string };
 
 export function useRuns() {
   const client = useQueryClient();
@@ -32,7 +32,10 @@ export function useRunSites(id: number, filters: SiteFilters) {
   return useQuery({
     queryKey: [...ROOT, "run", id, "sites", filters],
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(filters.page) });
+      const params = new URLSearchParams({
+        page: String(filters.page),
+        page_size: String(filters.pageSize),
+      });
       if (filters.state) params.set("state", filters.state);
       if (filters.search) params.set("search", filters.search);
       return api<SitePage>(`${runPath(id)}sites/?${params}`);

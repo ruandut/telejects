@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermission } from "@/features/realms/permissions";
 
 import type { RunProduct, Site } from "../types";
@@ -21,32 +22,53 @@ function bandwidth(ranges: [number | null, number | null][]): string {
     .join(", ");
 }
 
+/** One result on one line: the variant (cut short if it's long) and its status. Hover or focus
+ * it for the whole of it. */
+function Result({ result }: { result: Site["results"][number] }) {
+  const details = [
+    result.variant_name,
+    result.product_type_label,
+    bandwidth(result.bandwidths) && `${bandwidth(result.bandwidths)} Mbps`,
+    result.note,
+  ].filter(Boolean);
+  const badge = <ResultBadge status={result.status} label={result.status_label} />;
+  if (!details.length) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className="flex max-w-full min-w-0 items-center gap-1.5 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {result.variant_name && (
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {result.variant_name}
+            </span>
+          )}
+          <span className="ml-auto flex shrink-0">{badge}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="flex-col items-start gap-0.5">
+        {details.map((line, i) => (
+          <span key={i}>{line}</span>
+        ))}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** What one site has for one product: its results (per variant), or why there are none. */
 function Cell({ site, product }: { site: Site; product: RunProduct }) {
   const results = site.results.filter((r) => r.product === product.id);
   if (results.length) {
     return (
-      <div className="flex flex-wrap gap-1">
+      <ul className="grid min-w-0 gap-1">
         {results.map((result, i) => (
-          <span
-            key={i}
-            className="inline-flex max-w-full items-center gap-1"
-            title={[
-              result.variant_name,
-              result.product_type_label,
-              bandwidth(result.bandwidths) && `${bandwidth(result.bandwidths)} Mbps`,
-              result.note,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          >
-            {result.variant_name && (
-              <span className="truncate text-xs text-muted-foreground">{result.variant_name}</span>
-            )}
-            <ResultBadge status={result.status} label={result.status_label} />
-          </span>
+          <li key={i} className="flex min-w-0">
+            <Result result={result} />
+          </li>
         ))}
-      </div>
+      </ul>
     );
   }
   if (site.errors.some((e) => e.connection === product.connection))
@@ -83,7 +105,7 @@ function Errors({ site }: { site: Site }): ReactNode {
   );
 }
 
-/** A table on wider screens; cards at phone width, so nothing scrolls sideways. */
+/** A table on wider screens; cards at phone width, so the page never scrolls sideways. */
 export function SiteResults({ sites, products }: { sites: Site[]; products: RunProduct[] }) {
   if (!sites.length) {
     return (
@@ -94,38 +116,51 @@ export function SiteResults({ sites, products }: { sites: Site[]; products: RunP
   }
   return (
     <>
-      <div className="hidden overflow-x-auto rounded-xl border bg-card md:block">
+      {/* Columns keep a steady width and long text is cut short (whole on hover), so rows stay
+          one line per result; the table scrolls sideways inside its card when it must. */}
+      <div className="hidden min-w-0 overflow-hidden rounded-xl border bg-card md:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-14 pl-4">Line</TableHead>
               <TableHead>Site</TableHead>
               {products.map((product) => (
-                <TableHead key={product.id} className="min-w-36 whitespace-normal">
-                  <span className="block text-xs font-normal text-muted-foreground">
-                    {product.connection_name}
-                  </span>
-                  {product.name}
+                <TableHead key={product.id} className="h-auto py-2 align-bottom">
+                  <div
+                    className="max-w-60 min-w-44"
+                    title={`${product.connection_name}: ${product.name}`}
+                  >
+                    <span className="block truncate text-xs font-normal text-muted-foreground">
+                      {product.connection_name}
+                    </span>
+                    <span className="block truncate">{product.name}</span>
+                  </div>
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {sites.map((site) => (
-              <TableRow key={site.id} className="align-top">
-                <TableCell className="pl-4 text-muted-foreground tabular-nums">
+              <TableRow key={site.id}>
+                <TableCell className="pl-4 align-top text-muted-foreground tabular-nums">
                   {site.line_number}
                 </TableCell>
-                <TableCell className="max-w-64 whitespace-normal">
-                  <div className="font-medium">{site.name}</div>
-                  <div className="text-xs text-muted-foreground tabular-nums">
-                    {site.latitude}, {site.longitude}
+                <TableCell className="align-top">
+                  <div className="max-w-56 min-w-40 whitespace-normal">
+                    <div className="truncate font-medium" title={site.name}>
+                      {site.name}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground tabular-nums">
+                      {site.latitude}, {site.longitude}
+                    </div>
+                    <Errors site={site} />
                   </div>
-                  <Errors site={site} />
                 </TableCell>
                 {products.map((product) => (
-                  <TableCell key={product.id} className="whitespace-normal">
-                    <Cell site={site} product={product} />
+                  <TableCell key={product.id} className="align-top">
+                    <div className="max-w-60 min-w-44">
+                      <Cell site={site} product={product} />
+                    </div>
                   </TableCell>
                 ))}
               </TableRow>
@@ -134,9 +169,9 @@ export function SiteResults({ sites, products }: { sites: Site[]; products: RunP
         </Table>
       </div>
 
-      <ul className="grid gap-2 md:hidden">
+      <ul className="grid min-w-0 gap-2 md:hidden">
         {sites.map((site) => (
-          <li key={site.id} className="rounded-xl border bg-card p-4">
+          <li key={site.id} className="min-w-0 rounded-xl border bg-card p-4">
             <div className="flex items-baseline justify-between gap-2">
               <span className="min-w-0 truncate font-medium">{site.name}</span>
               <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
@@ -146,11 +181,11 @@ export function SiteResults({ sites, products }: { sites: Site[]; products: RunP
             <Errors site={site} />
             <dl className="mt-3 grid gap-2 text-sm">
               {products.map((product) => (
-                <div key={product.id} className="grid gap-1">
-                  <dt className="text-xs text-muted-foreground">
+                <div key={product.id} className="grid min-w-0 gap-1">
+                  <dt className="truncate text-xs text-muted-foreground">
                     {product.connection_name}: {product.name}
                   </dt>
-                  <dd>
+                  <dd className="min-w-0">
                     <Cell site={site} product={product} />
                   </dd>
                 </div>

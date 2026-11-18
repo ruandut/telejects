@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Download, RotateCcw, ScrollText, Square } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  RotateCcw,
+  ScrollText,
+  Square,
+} from "lucide-react";
 import { useState } from "react";
 
 import { NativeSelect } from "@/components/form";
@@ -17,9 +25,14 @@ import {
 } from "@/features/feasibilities/api";
 import { SiteResults } from "@/features/feasibilities/components/site-results";
 import { Progress, RunStatusBadge } from "@/features/feasibilities/components/status";
-import type { Run } from "@/features/feasibilities/types";
+import type { Run, SitePage } from "@/features/feasibilities/types";
 import { usePermission } from "@/features/realms/permissions";
 import { ApiError } from "@/network/errors";
+import {
+  SITE_PAGE_SIZES,
+  type SitePageSize,
+  useFeasibilityFilters,
+} from "@/stores/feasibility-filters";
 
 export const Route = createFileRoute("/_app/feasibilities/$runId")({
   component: RunPage,
@@ -69,9 +82,10 @@ function Loaded({ run }: { run: Run }) {
   const [state, setState] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const sites = useRunSites(run.id, { page, state, search: search.trim() });
+  const pageSize = useFeasibilityFilters((s) => s.pageSize);
+  const setPageSize = useFeasibilityFilters((s) => s.setPageSize);
+  const sites = useRunSites(run.id, { page, pageSize, state, search: search.trim() });
   const going = run.status === "queued" || run.status === "running";
-  const pages = sites.data ? Math.max(1, Math.ceil(sites.data.count / sites.data.page_size)) : 1;
 
   return (
     <>
@@ -170,20 +184,73 @@ function Loaded({ run }: { run: Run }) {
         <Skeleton className="h-40 w-full" />
       )}
 
-      {pages > 1 && (
-        <div className="flex items-center justify-between gap-2 text-sm">
-          <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <span className="text-muted-foreground tabular-nums">
-            Page {page} of {pages}
-          </span>
-          <Button variant="outline" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
+      {sites.data && sites.data.count > 0 && (
+        <Pager
+          data={sites.data}
+          onPage={setPage}
+          onPageSize={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
       )}
     </>
+  );
+}
+
+/** Rows per page, "21–40 of 312", and previous and next. The page shown is the server's: it
+ * moves back to the last page when the list shrinks under it. */
+function Pager({
+  data,
+  onPage,
+  onPageSize,
+}: {
+  data: SitePage;
+  onPage: (page: number) => void;
+  onPageSize: (size: SitePageSize) => void;
+}) {
+  const first = (data.page - 1) * data.page_size + 1;
+  const last = first + data.results.length - 1;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
+      <label className="flex items-center gap-2 text-muted-foreground">
+        Rows per page
+        <NativeSelect
+          className="w-20"
+          value={data.page_size}
+          onChange={(e) => onPageSize(Number(e.target.value) as SitePageSize)}
+        >
+          {SITE_PAGE_SIZES.map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </NativeSelect>
+      </label>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground tabular-nums" aria-live="polite">
+          {first}–{last} of {data.count}
+        </span>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Previous page"
+          disabled={!data.previous}
+          onClick={() => onPage(data.page - 1)}
+        >
+          <ChevronLeft />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Next page"
+          disabled={!data.next}
+          onClick={() => onPage(data.page + 1)}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
+    </div>
   );
 }
 
