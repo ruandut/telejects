@@ -53,6 +53,8 @@ class LogViewSet(RealmScopedMixin, mixins.RetrieveModelMixin, viewsets.GenericVi
             entries = entries.filter(check_id=check)
         if (sync := _int(params.get("sync"))) is not None:
             entries = entries.filter(sync_id=sync)
+        if (site_check := _int(params.get("site_check"))) is not None:
+            entries = entries.filter(site_check_id=site_check)
         if since := _day(params.get("from")):
             entries = entries.filter(created_at__gte=since)
         if until := _day(params.get("to"), end=True):

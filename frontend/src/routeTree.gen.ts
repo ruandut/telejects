@@ -14,6 +14,7 @@ import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
+import { Route as AppDevelopersIndexRouteImport } from './routes/_app/developers/index'
 import { Route as AppFeasibilitiesIndexRouteImport } from './routes/_app/feasibilities/index'
 import { Route as AppFeasibilitiesRunIdRouteImport } from './routes/_app/feasibilities/$runId'
 import { Route as AppFeasibilitiesNewRouteImport } from './routes/_app/feasibilities/new'
@@ -45,6 +46,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
   id: '/account/',
   path: '/account/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDevelopersIndexRoute = AppDevelopersIndexRouteImport.update({
+  id: '/developers/',
+  path: '/developers/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFeasibilitiesIndexRoute = AppFeasibilitiesIndexRouteImport.update({
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
   '/logs/$logId': typeof AppLogsLogIdRoute
   '/account/': typeof AppAccountIndexRoute
+  '/developers/': typeof AppDevelopersIndexRoute
   '/feasibilities/': typeof AppFeasibilitiesIndexRoute
   '/integrations/': typeof AppIntegrationsIndexRoute
   '/logs/': typeof AppLogsIndexRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByTo {
   '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
   '/logs/$logId': typeof AppLogsLogIdRoute
   '/account': typeof AppAccountIndexRoute
+  '/developers': typeof AppDevelopersIndexRoute
   '/feasibilities': typeof AppFeasibilitiesIndexRoute
   '/integrations': typeof AppIntegrationsIndexRoute
   '/logs': typeof AppLogsIndexRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/_app/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
   '/_app/logs/$logId': typeof AppLogsLogIdRoute
   '/_app/account/': typeof AppAccountIndexRoute
+  '/_app/developers/': typeof AppDevelopersIndexRoute
   '/_app/feasibilities/': typeof AppFeasibilitiesIndexRoute
   '/_app/integrations/': typeof AppIntegrationsIndexRoute
   '/_app/logs/': typeof AppLogsIndexRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/integrations/$connectionId'
     | '/logs/$logId'
     | '/account/'
+    | '/developers/'
     | '/feasibilities/'
     | '/integrations/'
     | '/logs/'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/integrations/$connectionId'
     | '/logs/$logId'
     | '/account'
+    | '/developers'
     | '/feasibilities'
     | '/integrations'
     | '/logs'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/_app/integrations/$connectionId'
     | '/_app/logs/$logId'
     | '/_app/account/'
+    | '/_app/developers/'
     | '/_app/feasibilities/'
     | '/_app/integrations/'
     | '/_app/logs/'
@@ -220,6 +232,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account/'
       preLoaderRoute: typeof AppAccountIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/developers/': {
+      id: '/_app/developers/'
+      path: '/developers'
+      fullPath: '/developers/'
+      preLoaderRoute: typeof AppDevelopersIndexRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/feasibilities/': {
@@ -288,6 +307,7 @@ interface AppRouteChildren {
   AppIntegrationsConnectionIdRoute: typeof AppIntegrationsConnectionIdRoute
   AppLogsLogIdRoute: typeof AppLogsLogIdRoute
   AppAccountIndexRoute: typeof AppAccountIndexRoute
+  AppDevelopersIndexRoute: typeof AppDevelopersIndexRoute
   AppFeasibilitiesIndexRoute: typeof AppFeasibilitiesIndexRoute
   AppIntegrationsIndexRoute: typeof AppIntegrationsIndexRoute
   AppLogsIndexRoute: typeof AppLogsIndexRoute
@@ -301,6 +321,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppIntegrationsConnectionIdRoute: AppIntegrationsConnectionIdRoute,
   AppLogsLogIdRoute: AppLogsLogIdRoute,
   AppAccountIndexRoute: AppAccountIndexRoute,
+  AppDevelopersIndexRoute: AppDevelopersIndexRoute,
   AppFeasibilitiesIndexRoute: AppFeasibilitiesIndexRoute,
   AppIntegrationsIndexRoute: AppIntegrationsIndexRoute,
   AppLogsIndexRoute: AppLogsIndexRoute,

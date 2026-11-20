@@ -215,6 +215,7 @@ def test_at_0001_15_i_pick_a_role_when_adding_someone(api, realm):
         "integrations.logs",
         "feasibilities.view",
         "feasibilities.run",
+        "feasibilities.quote",
     ]
 
     res = api.post("/api/users/", {"email": "x@example.com", "name": "No Role"}, format="json")
@@ -246,6 +247,8 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
     assert me["realm"]["name"] == "Northwind Fibre"
     assert me["realm"]["role"]["key"] == ADMIN
     assert me["realm"]["permissions"] == [
+        "api_clients.manage",
+        "feasibilities.quote",
         "feasibilities.run",
         "feasibilities.view",
         "integrations.logs",
@@ -257,6 +260,7 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
 
     pm = member(realm, "pm@example.com", "project_manager")
     assert client_for(pm.user, realm).get("/api/auth/me/").json()["realm"]["permissions"] == [
+        "feasibilities.quote",
         "feasibilities.run",
         "feasibilities.view",
         "integrations.logs",

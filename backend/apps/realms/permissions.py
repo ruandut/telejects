@@ -3,7 +3,8 @@ permission checks.
 
 A browser tab names its company in the X-Realm header, so two tabs on different companies can't
 write into each other's. Without the header the user's oldest company is used. Either way the
-user must be an active member, or the request is refused.
+user must be an active member, or the request is refused. An API client's token (0006) names
+its company itself.
 
 `InRealm` is a default permission class (see settings), so a new endpoint is company-gated
 unless it says otherwise. It sets `request.realm` and `request.membership`. Querysets still
@@ -30,6 +31,13 @@ class RealmRequired(PermissionDenied):
 
 def resolve_membership(request) -> RealmMembership:
     asked = request.headers.get(REALM_HEADER)
+    # An API client (0006) works in its own company only: no header needed, and one naming
+    # another company gets the same refusal as a non-member.
+    client = getattr(request.user, "client_membership", None)
+    if client is not None:
+        if asked and asked.strip() != str(client.realm_id):
+            raise RealmRequired("You aren't a member of that company.", "not_member")
+        return client
     if asked:
         membership = RealmMembership.objects.of_user(request.user).in_realm(asked).first()
         if membership is None:

@@ -1,0 +1,28 @@
+{
+    "count": 3,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "name": "Connect Link Africa",
+            "id": 7,
+            "description": "All Link Africa prices",
+            "products": [{"id": 41, "name": "Link Africa Fibre", "provider_name": "LINK_AFRICA"}]
+        },
+        {
+            "name": "Connect MTN",
+            "id": 5,
+            "description": "All available MTN prices",
+            "products": [{"id": 32, "name": "Business Fibre 100", "provider_name": "MTN"}]
+        },
+        {
+            "name": "Vodacom Products",
+            "id": 1,
+            "description": "All available Vodacom prices",
+            "products": [
+                {"id": 24, "name": "Business Fibre", "provider_name": "Vodacom"},
+                {"id": 23, "name": "Business Internet LTE", "provider_name": "Vodacom"}
+            ]
+        }
+    ]
+}

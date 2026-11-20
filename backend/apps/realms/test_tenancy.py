@@ -120,6 +120,7 @@ def test_admin_always_has_every_permission(realm, monkeypatch):
                 "integrations.logs",
                 "feasibilities.view",
                 "feasibilities.run",
+                "feasibilities.quote",
             },
         ),
         ("viewer", {"feasibilities.view"}),

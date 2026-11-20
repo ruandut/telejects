@@ -1,0 +1,36 @@
+{
+    "success": true,
+    "exceptions": [],
+    "data": [
+        {
+            "id": "<result>",
+            "access_medium": {
+                "id": 453,
+                "name": "Mobile LTE",
+                "provider_access_medium_identifier_id": 3,
+                "product": {"id": 23, "name": "Business Internet LTE", "provider_name": "Vodacom"}
+            }
+        },
+        {
+            "id": "<result>",
+            "access_medium": {
+                "id": 488,
+                "name": "Fibre",
+                "provider_access_medium_identifier_id": 20,
+                "product": {"id": 24, "name": "Business Fibre", "provider_name": "Vodacom"}
+            }
+        },
+        {
+            "id": "<result>",
+            "access_medium": {
+                "product": {"id": 32, "name": "Business Fibre 100", "provider_name": "MTN"}
+            }
+        },
+        {
+            "id": "<result>",
+            "access_medium": {
+                "product": {"id": 33, "name": "Business LTE", "provider_name": "MTN"}
+            }
+        }
+    ]
+}

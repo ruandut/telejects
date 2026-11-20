@@ -21,11 +21,17 @@ Specs so far:
   a Logs section; each company keeps its last `INTEGRATION_LOGS_DEFAULT_LIMIT` (5,000) unless
   staff set its own in Django admin. Provider calls report to a `Recorder`
   (`apps/integration_logs`); a new call site must pass one.
-- **Next:** single-site feasibility from a map.
-- **Later: client API access.** An Integrations section where a company creates API clients and
-  works with a public, versioned API directly, feasibilities first. OAuth2 client credentials
-  through django-oauth-toolkit: each API client belongs to a realm, its scopes are our
-  permission codes (optionally limited to projects), and its secret is stored hashed.
+- **0006 Price book and single-site quotes over the API**: Rapid's price book as Telejects'
+  platform book (`apps/pricebook`, Rapid's ids kept, offered to every company unless staff limit
+  it), and Rapid's client endpoints at Rapid's paths with Rapid's exact bodies and responses
+  (`single-site-feasibility`, `single-site-feasibility-quote`, `connect-product`, `product`).
+  Held to Rapid's shapes by contract tests (`apps/pricebook/rapid_responses/`): don't change a
+  field of those responses. One-site checks are `apps/site_checks`; API clients (OAuth2 client
+  credentials through django-oauth-toolkit, secret hashed) are `apps/api_clients`.
+- **Next:** single-site feasibility from a map (reuses `site_checks`).
+- **Later: client API access, more of it.** A public, versioned API beyond the Rapid paths,
+  feasibilities first, on the API clients from 0006; their permissions optionally limited to
+  projects.
 - **Later: SSO and MFA** through django-allauth (OIDC and SAML), configured per company.
 - **Later: per-project guest access** (see Multi-tenancy).
 
@@ -100,6 +106,12 @@ companies is the worst bug this system can have.
   (built-in ones read their permissions from code), so custom roles can come later.
 - An endpoint that works across companies, or before sign-in, opts out explicitly and is added
   to the allowlist in `apps/realms/test_isolation.py` with a reason.
+- **API client tokens (0006) work only where a view opts in** with
+  `authentication_classes = [ApiClientAuthentication, JWTAuthentication]`; every other endpoint
+  is JWT only. On such a request `InRealm` takes the company from the token, and
+  `request.membership` is a `ClientMembership` (the client's permissions, limited by its
+  maker's), not a `RealmMembership`. A new client-facing endpoint adds its permission codes to
+  `api_clients.services.CLIENT_PERMISSIONS` and gets isolation tests with a client token too.
 - **Every endpoint gets isolation tests in the same change**, in `apps/realms/test_isolation.py`:
   1. another company's rows stay out of lists, counts and aggregates;
   2. detail routes and custom actions on another company's rows return 404, for every method,

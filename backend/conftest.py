@@ -128,6 +128,16 @@ def worker(monkeypatch, settings):
     monkeypatch.setattr(feasibilities, "_enqueue_checks", inline.checks)
     monkeypatch.setattr(feasibilities, "_sleep", lambda seconds: None)
     monkeypatch.setattr(demo, "DELAY_SECONDS", 0)
+    # One-site checks (0006): each provider call runs inline as it is enqueued.
+    from apps.site_checks import services as site_checks
+
+    def run_calls(realm_id, call_ids):
+        for call_id in call_ids:
+            site_checks.perform_call(realm_id, call_id)
+
+    monkeypatch.setattr(site_checks, "_after_commit", lambda func: func())
+    monkeypatch.setattr(site_checks, "_enqueue_calls", run_calls)
+    monkeypatch.setattr(site_checks, "_sleep", lambda seconds: None)
     settings.INTEGRATIONS_DEMO_ENABLED = True
     # No Telejects provider accounts unless a test sets them up: never the real keys in .env.
     settings.INTEGRATIONS_PLATFORM_ACCOUNTS = {}
@@ -284,7 +294,11 @@ def providers():
     import respx
 
     with respx.mock(assert_all_called=False) as router:
-        yield type("Providers", (), {"mtn": FakeMtn(router), "vodacom": FakeVodacom(router)})
+        yield type(
+            "Providers",
+            (),
+            {"mtn": FakeMtn(router), "vodacom": FakeVodacom(router), "router": router},
+        )
 
 
 def connect(client, connector: str, name: str = "", **fields):

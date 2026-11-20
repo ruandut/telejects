@@ -19,7 +19,9 @@ PERMISSIONS: dict[str, str] = {
     "integrations.manage": "Connect providers, change their credentials, and test or sync them",
     "integrations.logs": "See the requests made to providers and their answers",
     "feasibilities.view": "See feasibility runs and their results, and export them",
-    "feasibilities.run": "Start, cancel and retry feasibility runs",
+    "feasibilities.run": "Start, cancel and retry feasibility runs, and check single sites",
+    "feasibilities.quote": "Price feasible connections from Telejects' price book",
+    "api_clients.manage": "Create and revoke the company's API clients",
 }
 
 ADMIN = "admin"
@@ -45,6 +47,7 @@ SYSTEM_ROLES: dict[str, SystemRole] = {
                 "integrations.logs",
                 "feasibilities.view",
                 "feasibilities.run",
+                "feasibilities.quote",
             }
         ),
     ),

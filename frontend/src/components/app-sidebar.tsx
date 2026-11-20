@@ -1,6 +1,7 @@
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import {
   ChevronsUpDown,
+  KeyRound,
   LayoutDashboard,
   MapPinned,
   Plug,
@@ -49,6 +50,7 @@ const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/feasibilities", label: "Feasibilities", icon: MapPinned, needs: "feasibilities.view" },
   { to: "/integrations", label: "Integrations", icon: Plug, needs: "integrations.view" },
+  { to: "/developers", label: "API clients", icon: KeyRound, needs: "api_clients.manage" },
   { to: "/logs", label: "Logs", icon: ScrollText, needs: "integrations.logs" },
   { to: "/users", label: "User management", icon: Users, needs: "users.view" },
 ];

@@ -20,6 +20,7 @@ export type LogEntry = {
   run_id: number | null;
   check_id: number | null;
   sync_id: number | null;
+  site_check_id: number | null;
 };
 
 export type LogDetail = LogEntry & {

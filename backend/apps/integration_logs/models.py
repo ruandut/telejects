@@ -30,6 +30,8 @@ class IntegrationLog(TenantModel):
     run_id = models.BigIntegerField(null=True, blank=True, db_index=True)
     check_id = models.BigIntegerField(null=True, blank=True, db_index=True)
     sync_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    # Or a one-site check (0006).
+    site_check_id = models.BigIntegerField(null=True, blank=True, db_index=True)
     attempt = models.PositiveSmallIntegerField(default=1)
     method = models.CharField(max_length=10, blank=True)
     url = models.TextField(blank=True)

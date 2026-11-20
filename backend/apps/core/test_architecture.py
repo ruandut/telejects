@@ -19,6 +19,18 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "integration_logs": {"core", "realms"},
     "integrations": {"core", "accounts", "realms", "jobs", "integration_logs"},
     "feasibilities": {"core", "accounts", "realms", "jobs", "integrations", "integration_logs"},
+    "api_clients": {"core", "accounts", "realms"},
+    "site_checks": {"core", "accounts", "realms", "jobs", "integrations", "integration_logs"},
+    "pricebook": {
+        "core",
+        "accounts",
+        "realms",
+        "jobs",
+        "integrations",
+        "integration_logs",
+        "api_clients",
+        "site_checks",
+    },
 }
 
 

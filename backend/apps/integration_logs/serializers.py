@@ -30,6 +30,7 @@ class LogListSerializer(RealmScopedSerializer):
             "run_id",
             "check_id",
             "sync_id",
+            "site_check_id",
         ]
         read_only_fields = fields
 

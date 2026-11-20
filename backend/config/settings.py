@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "channels",
+    "oauth2_provider",
     # Platform apps: shared plumbing, no product features. Allowed imports between apps are
     # listed in apps/core/test_architecture.py.
     "apps.core",
@@ -44,6 +45,9 @@ INSTALLED_APPS = [
     "apps.integration_logs",
     "apps.integrations",
     "apps.feasibilities",
+    "apps.api_clients",
+    "apps.site_checks",
+    "apps.pricebook",
 ]
 
 MIDDLEWARE = [
@@ -116,7 +120,12 @@ REST_FRAMEWORK = {
         "apps.realms.permissions.InRealm",
     ],
     # "password": changing my own password (0002), which checks the current one.
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "invitation": "20/min", "password": "10/min"},
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+        "invitation": "20/min",
+        "password": "10/min",
+        "oauth": "30/min",
+    },
     "COERCE_DECIMAL_TO_STRING": False,
 }
 
@@ -129,6 +138,17 @@ SIMPLE_JWT = {
     "CHECK_REVOKE_TOKEN": True,
     "TOKEN_REFRESH_SERIALIZER": "apps.accounts.serializers.RevocableTokenRefreshSerializer",
 }
+
+# API clients (0006): OAuth2 client credentials only. Secrets are stored hashed; an access token
+# lasts an hour and the client asks for a new one (no refresh tokens). What a token may do comes
+# from its client's permission codes (apps/api_clients), not OAuth scopes.
+OAUTH2_PROVIDER = {
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
+    "SCOPES": {"api": "Use the Telejects API as this client"},
+    "DEFAULT_SCOPES": ["api"],
+    "PKCE_REQUIRED": True,
+}
+OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
 
 # The Vite dev server proxies /api, so CORS only matters if you hit Django directly.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5184"])

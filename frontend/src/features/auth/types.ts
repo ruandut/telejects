@@ -6,7 +6,9 @@ export type Permission =
   | "integrations.manage"
   | "integrations.logs"
   | "feasibilities.view"
-  | "feasibilities.run";
+  | "feasibilities.run"
+  | "feasibilities.quote"
+  | "api_clients.manage";
 
 export type RoleRef = { id: number; key: string; name: string };
 

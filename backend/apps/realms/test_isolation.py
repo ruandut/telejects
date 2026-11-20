@@ -56,6 +56,9 @@ COMPANY_ROUTES = [
     "/api/feasibilities/runs/products/",
     "/api/integration-logs/",
     "/api/integration-logs/limits/",
+    "/api/api-clients/",
+    "/api/connect-product/",
+    "/api/product/",
 ]
 
 
@@ -255,6 +258,13 @@ def test_roles_are_read_only(api, realm):
         "/api/integration-logs/",
         "/api/integration-logs/1/",
         "/api/integration-logs/limits/",
+        "/api/api-clients/",
+        "/api/api-clients/1/",
+        "/api/api-clients/permissions/",
+        "/api/connect-product/",
+        "/api/connect-product/1/",
+        "/api/product/",
+        "/api/product/1/",
     ],
 )
 def test_signed_out_requests_are_refused(db, path):
@@ -273,6 +283,8 @@ NOT_REALM_GATED = {
     "password": "changes only the signed-in person's own password, whichever company (0002)",
     "user-invitation": "confirming an account by emailed link, before there is a password; "
     "tells the token's holder only the company name and their own address",
+    "oauth_token": "an API client's id and secret for a token, before there is a user; the "
+    "token then names the client's company alone (0006)",
 }
 
 # Models that aren't rows inside a company, each with the reason.
@@ -285,6 +297,13 @@ NOT_TENANT_MODELS = {
     "integrations.PlatformAccount": "Telejects' own provider credentials, kept by platform staff; "
     "a company only reaches one through its own PlatformGrant and never sees its settings or "
     "secrets (0004)",
+    "pricebook.PriceBook": "Telejects' price book, kept by platform staff; offered to every "
+    "company or through a company's own PriceBookGrant, read-only to them (0006)",
+    "pricebook.CatalogueProduct": "Rapid's numbered provider products, the same for every "
+    "company; holds no company data (0006)",
+    "pricebook.AccessMedium": "Vodacom's delivery methods, the same for every company (0006)",
+    "pricebook.PriceDefinition": "prices in Telejects' price book, platform data (0006)",
+    "pricebook.ConnectProduct": "what Telejects' price book quotes for, platform data (0006)",
 }
 
 # Every `.across_realms()` call outside tests, by file and enclosing function, with the reason.
@@ -298,6 +317,8 @@ ACROSS_REALMS_CALLS = {
     "due syncs; each then runs with its own company's id (0003)",
     "integrations/services.py::_publish_platform": "tells each company using a platform account "
     "that its connections changed (ids only); the socket then checks each subscriber (0004)",
+    "api_clients/querysets.py::ApiClientQuerySet.for_token": "an API client's token is the only "
+    "thing naming its company; the request then works in that company alone (0006)",
 }
 
 
@@ -777,3 +798,128 @@ def test_at_0005_12_another_companys_logs_stay_out_of_sight(api, realm, blue_fea
     assert foreign.status_code == 404
     assert (foreign.status_code, foreign.json()) == (missing.status_code, missing.json())
     assert "Blue" not in foreign.content.decode()
+
+
+# --- price book, API clients and one-site checks (0006) -----------------------------------------
+
+
+@pytest.fixture
+def blue_machine(blue_feasibility):
+    """Blue Mast's API client, with a token, and a one-site check of its own."""
+    from apps.pricebook.test_pricebook import bearer, make_book, make_client, token_of
+
+    make_book()
+    owner = client_for(blue_feasibility["owner"].user, blue_feasibility["realm"])
+    created = make_client(owner, ["feasibilities.run", "feasibilities.quote"], name="Blue bot")
+    machine = bearer(token_of(created))
+    res = machine.post(
+        "/api/single-site-feasibility/",
+        {"latitude": -25.7, "longitude": 28.2, "products": [32]},
+        format="json",
+    )
+    assert res.status_code == 200 and res.json()["data"]
+    return {**blue_feasibility, "client": created, "machine": machine, "single": res.json()}
+
+
+def _client_snapshot(client_id):
+    from apps.api_clients.models import ApiClient
+
+    row = ApiClient.objects.across_realms().get(pk=client_id)
+    return (row.name, row.permissions, row.revoked_at, row.application_id)
+
+
+def test_at_0006_17_another_companys_api_clients_stay_out_of_sight(api, realm, blue_machine):
+    theirs = blue_machine["client"]
+    assert api.get("/api/api-clients/").json() == []
+    before = _client_snapshot(theirs["id"])
+    path = f"/api/api-clients/{theirs['id']}/"
+    foreign = api.get(path)
+    missing = api.get("/api/api-clients/999999/")
+    assert foreign.status_code == 404
+    assert (foreign.status_code, foreign.json()) == (missing.status_code, missing.json())
+    assert api.delete(path).status_code == 404
+    assert api.patch(path, {"name": "x"}, format="json").status_code in (404, 405)
+    assert api.put(path, {"name": "x"}, format="json").status_code in (404, 405)
+    assert _client_snapshot(theirs["id"]) == before
+    # And their token still works for them alone.
+    assert blue_machine["machine"].get("/api/product/").status_code == 200
+
+
+def test_at_0006_17_a_client_token_works_only_in_its_own_company(realm, blue_machine):
+    machine = blue_machine["machine"]
+    # Naming another company is refused the way a non-member is.
+    res = machine.get("/api/product/", HTTP_X_REALM=str(realm.id))
+    assert res.status_code == 403 and res.json()["code"] == "not_member"
+    res = machine.post(
+        "/api/single-site-feasibility/",
+        {"latitude": -26.1, "longitude": 28.0},
+        format="json",
+        HTTP_X_REALM=str(realm.id),
+    )
+    assert res.status_code == 403
+    # A client token can't reach a person's endpoints or the company's own API.
+    for path in ("/api/auth/me/", "/api/users/", "/api/api-clients/", "/api/integration-logs/"):
+        assert machine.get(path).status_code == 401
+
+
+def test_at_0006_17_another_companys_checks_and_connections_are_never_used(
+    api, realm, blue_machine, providers
+):
+    """Northwind has no MTN connection; Blue Mast's is never used for its checks, and Blue's
+    check results never appear in Northwind's answers."""
+    from apps.integration_logs.models import IntegrationLog
+    from apps.site_checks.models import SiteCheck, SiteCheckResult
+
+    blue_ids = {row["id"] for row in blue_machine["single"]["data"]}
+    providers.mtn.feasibility_calls.clear()
+    res = api.post(
+        "/api/single-site-feasibility/",
+        {"latitude": -25.7, "longitude": 28.2, "products": [32]},
+        format="json",
+    )
+    body = res.json()
+    assert res.status_code == 200
+    assert body["data"] == []
+    assert body["exceptions"] == [{"exception": "NotConnected", "message": "Not connected to mtn."}]
+    assert providers.mtn.feasibility_calls == []
+    assert not blue_ids & {row["id"] for row in body["data"]}
+    assert SiteCheckResult.objects.in_realm(realm).count() == 0
+    mine = SiteCheck.objects.in_realm(realm).get()
+    assert IntegrationLog.objects.in_realm(realm).filter(site_check_id=mine.id).count() == 0
+    # Blue's one-site logs are theirs alone.
+    assert api.get("/api/integration-logs/").json()["count"] == 0
+
+
+def test_at_0006_17_non_members_and_permission_limits_on_rapids_endpoints(realm, blue_machine):
+    from apps.pricebook.models import PriceBook
+
+    place = {"latitude": -26.1, "longitude": 28.0}
+    outsider = client_for(blue_machine["owner"].user, realm)  # Blue's owner naming Northwind
+    for path in ("/api/single-site-feasibility/", "/api/single-site-feasibility-quote/"):
+        res = outsider.post(path, place, format="json")
+        assert res.status_code == 403 and res.json()["code"] == "not_member"
+
+    viewer = client_for(member(realm, "viewer@northwind.example", "viewer").user, realm)
+    for path in ("/api/single-site-feasibility/", "/api/single-site-feasibility-quote/"):
+        assert viewer.post(path, place, format="json").status_code == 403
+    assert viewer.get("/api/connect-product/").status_code == 403
+    assert viewer.get("/api/product/").status_code == 403
+    assert viewer.get("/api/api-clients/").status_code == 403
+    res = viewer.post(
+        "/api/api-clients/", {"name": "v", "permissions": ["feasibilities.view"]}, format="json"
+    )
+    assert res.status_code == 403
+
+    pm = client_for(member(realm, "pm@northwind.example", "project_manager").user, realm)
+    assert pm.get("/api/connect-product/").status_code == 200
+    assert pm.get("/api/api-clients/").status_code == 403
+
+    # A book offered to another company only is no book at all here.
+    book = PriceBook.objects.get()
+    book.available_to_all = False
+    book.save()
+    from apps.pricebook.models import PriceBookGrant
+
+    PriceBookGrant.objects.create(realm=blue_machine["realm"], book=book)
+    assert pm.get("/api/connect-product/").status_code == 403
+    assert blue_machine["machine"].get("/api/connect-product/").status_code == 200

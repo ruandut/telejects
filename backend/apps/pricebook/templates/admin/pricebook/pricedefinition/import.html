@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Import price definitions</h1>
+<p>Rapid's price definition CSV: one definition per row, matched on its access medium or
+provider product, term, data and speeds. Prices "MRC on Request only", "NRC on Request only" or
+"POA" mean price on request.</p>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <input type="submit" value="Import">
+</form>
+{% endblock %}

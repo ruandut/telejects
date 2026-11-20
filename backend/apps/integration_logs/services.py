@@ -114,6 +114,7 @@ class Recorder:
     run_id: int | None = None
     check_id: int | None = None
     sync_id: int | None = None
+    site_check_id: int | None = None
     attempt: int = 1
     # Values to hide beyond the engine's own redaction (a platform account's settings).
     hide: list = field(default_factory=list)
@@ -140,6 +141,7 @@ class Recorder:
             run_id=self.run_id,
             check_id=self.check_id,
             sync_id=self.sync_id,
+            site_check_id=self.site_check_id,
             attempt=self.attempt,
             method=str(request.get("method", ""))[:10],
             url=_text(request.get("url", "")),
