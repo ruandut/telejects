@@ -13,3 +13,5 @@ node_modules/
 frontend/dist/
 # TanStack Router plugin scratch files
 frontend/.tanstack/
+# Real samples shared for reference: never in the repo
+samples/
