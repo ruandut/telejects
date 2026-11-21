@@ -241,6 +241,35 @@ def test_at_0003_29_i_rename_a_run(api, realm, mtn_and_vodacom, worker, monkeypa
     assert api.put(path, {"name": "Stores"}, format="json").status_code == 405
 
 
+def test_at_0003_32_i_change_a_runs_products(api, realm, mtn_and_vodacom):
+    run = start_run(api, picks(mtn_and_vodacom, "Business Fibre 100"), rows(*SITES)).json()
+    assert run_of(api, run["id"])["status"] == "completed"
+    old_results = {r.id for r in FeasibilityResult.objects.in_realm(realm)}
+    path = f"/api/feasibilities/runs/{run['id']}/rerun/"
+
+    # Bad picks are refused, and the run is left as it was.
+    retired = mtn_and_vodacom["Business Fibre"]
+    ProviderProduct.objects.in_realm(realm).filter(pk=retired.pk).update(retired_at=timezone.now())
+    for products in ([], [retired.id], [999999]):
+        res = api.post(path, {"products": products}, format="json")
+        assert res.status_code == 400 and "products" in res.json()
+    assert [p["id"] for p in run_of(api, run["id"])["products"]] == [
+        mtn_and_vodacom["Business Fibre 100"].id
+    ]
+    assert {r.id for r in FeasibilityResult.objects.in_realm(realm)} == old_results
+
+    # New products replace the old ones, and every site is checked again against them.
+    chosen = picks(mtn_and_vodacom, "Business LTE")
+    res = api.post(path, {"products": chosen}, format="json")
+    assert res.status_code == 200
+    assert [p["id"] for p in res.json()["products"]] == chosen
+    again = run_of(api, run["id"])
+    assert again["status"] == "completed" and again["name"] == run["name"]
+    assert not old_results & {r.id for r in FeasibilityResult.objects.in_realm(realm)}
+    for site in sites_of(api, run["id"]):
+        assert {r["product"] for r in site["results"]} == set(chosen)
+
+
 def test_at_0003_28_only_a_finished_run_runs_again(api, realm, mtn_and_vodacom, worker, providers):
     worker.hold()
     chosen = picks(mtn_and_vodacom, "Business Fibre 100", "Business Fibre")

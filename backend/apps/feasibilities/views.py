@@ -21,6 +21,7 @@ from .models import FeasibilityRun, RunSite
 from .pagination import SitePagination
 from .serializers import (
     RenameRunSerializer,
+    RerunSerializer,
     RunListSerializer,
     RunProductSerializer,
     RunSerializer,
@@ -100,7 +101,11 @@ class RunViewSet(
 
     @action(detail=True, methods=["post"])
     def rerun(self, request, pk=None):
-        return self._fresh(services.rerun(self.get_object()))
+        """Runs a finished run again; with `products`, against those instead (editing them)."""
+        run = self.get_object()
+        serializer = RerunSerializer(data=request.data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        return self._fresh(services.rerun(run, serializer.validated_data.get("products")))
 
     @action(detail=True, methods=["get"])
     def sites(self, request, pk=None):

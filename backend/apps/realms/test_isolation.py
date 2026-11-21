@@ -548,7 +548,8 @@ def test_at_0003_26_a_run_cant_use_another_companys_products(
     api, realm, blue_feasibility, providers
 ):
     from apps.feasibilities.models import FeasibilityRun
-    from conftest import rows, start_run
+    from apps.integrations.models import ProviderProduct
+    from conftest import connect, rows, start_run
 
     sent = len(providers.mtn.feasibility_calls)
     theirs = [p.id for p in blue_feasibility["products"]]
@@ -556,6 +557,17 @@ def test_at_0003_26_a_run_cant_use_another_companys_products(
     assert res.status_code == 400 and "products" in res.json()
     assert FeasibilityRun.objects.in_realm(realm).count() == 0
     assert len(providers.mtn.feasibility_calls) == sent
+
+    # Nor can a run's products be changed to theirs.
+    connect(api, "demo", "Demo")
+    mine = ProviderProduct.objects.in_realm(realm).current().first()
+    run = start_run(api, [mine.id], rows(("Mine", -26.1, 28.0))).json()
+    res = api.post(
+        f"/api/feasibilities/runs/{run['id']}/rerun/", {"products": theirs}, format="json"
+    )
+    assert res.status_code == 400 and "products" in res.json()
+    kept = FeasibilityRun.objects.in_realm(realm).get(pk=run["id"])
+    assert list(kept.products.values_list("id", flat=True)) == [mine.id]
 
 
 def test_at_0003_27_tasks_stay_in_their_company(api, realm, blue_feasibility, providers):

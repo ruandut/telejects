@@ -112,6 +112,21 @@ export function useRunAction(id: number) {
   });
 }
 
+/** New products for a finished run; saving them always runs it again. */
+export function useEditRunProducts(id: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (products: number[]) =>
+      api<Run>(`${runPath(id)}rerun/`, { method: "POST", body: JSON.stringify({ products }) }),
+    onSuccess: (run) => {
+      toast.success("Products saved. Running it again…");
+      client.setQueryData([...ROOT, "run", id], run);
+      void client.invalidateQueries({ queryKey: [...ROOT, "run", id, "sites"] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
 export function useRenameRun(id: number) {
   const client = useQueryClient();
   return useMutation({

@@ -420,6 +420,14 @@ without needing `integrations.view`.
   slows the others down but never holds them up
 - And within one company, runs go in the order they started (pause one to let another go first)
 
+### AT-0003-32 — I change a run's products
+- Given a completed or cancelled run
+- When I choose Edit products, the dialog tells me saving runs it again, and I save new picks
+- Then the run's products are replaced by the new ones, and all its sites are checked again
+  against them, replacing its old checks and results (the run keeps its id, name and sites)
+- And I must pick at least one product, each one my company's connections still offer; another
+  company's products are refused (AT-0003-26); the same runs as AT-0003-28 can't be changed
+
 ### Connectors
 
 ### AT-0003-22 — MTN's answers become ours
@@ -570,6 +578,12 @@ Built as approved, with decisions 6–12 as drafted and 13 as decided.
   metadata. Pausing and cancelling start `feasibility-drop-queued`, which cancels that run's
   tasks still queued in Hatchet from before that moment. Otherwise each would still take a turn
   and a unit of the account's rate limit from everyone on it.
+- **Edit products (AT-0003-32, added 2026-11-21 at Ruan's request):** `POST
+  /api/feasibilities/runs/<id>/rerun/` takes an optional `products` list; given, it is checked
+  as when starting a run (`services._check_products`) and replaces the run's products before it
+  runs again. The run page's Edit products dialog (`edit-products-dialog.tsx`) reuses the
+  product picker and says saving runs it again. Tests in `test_feasibilities.py` (32) and added
+  to 26.
 - **Deviations:**
   - The planning task makes the checks, not the request, so starting a 10,000-row run returns
     quickly.

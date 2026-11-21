@@ -154,16 +154,7 @@ def start_run(
     name = (name or "").strip()
     if not name or len(name) > 100:
         raise ValidationError({"name": "Give the run a name of up to 100 characters."})
-    if not products:
-        raise ValidationError({"products": "Pick at least one product."})
-    usable = {
-        p.id
-        for p in ProviderProduct.objects.in_realm(realm)
-        .current()
-        .filter(id__in=[p.id for p in products])
-    }
-    if any(p.id not in usable or p.realm_id != realm.id for p in products):
-        raise ValidationError({"products": "Pick products your company's connections offer."})
+    _check_products(realm.id, products)
     clean = _clean_rows(rows)
     columns = [str(c)[:100] for c in (columns or [])][:MAX_COLUMNS]
     run = FeasibilityRun.objects.create(
@@ -530,10 +521,25 @@ def retry_failed(run: FeasibilityRun) -> FeasibilityRun:
     return run
 
 
+def _check_products(realm_id: int, products: list[ProviderProduct]) -> None:
+    """A run's products: at least one, all the company's own and still offered."""
+    if not products:
+        raise ValidationError({"products": "Pick at least one product."})
+    usable = {
+        p.id
+        for p in ProviderProduct.objects.in_realm_id(realm_id)
+        .current()
+        .filter(id__in=[p.id for p in products])
+    }
+    if any(p.id not in usable or p.realm_id != realm_id for p in products):
+        raise ValidationError({"products": "Pick products your company's connections offer."})
+
+
 @transaction.atomic
-def rerun(run: FeasibilityRun) -> FeasibilityRun:
+def rerun(run: FeasibilityRun, products: list[ProviderProduct] | None = None) -> FeasibilityRun:
     """Check a finished (or cancelled) run's sites again, in place: its checks and results are
-    replaced by new ones, against the products it picked that are still offered."""
+    replaced by new ones, against the products it picked that are still offered, or against
+    `products` when they're given (editing a run's products always runs it again)."""
     run = FeasibilityRun.objects.in_realm(run.realm_id).select_for_update().get(pk=run.pk)
     if run.is_going:
         raise ValidationError({"detail": "A run can be run again once it has finished."})
@@ -543,11 +549,14 @@ def rerun(run: FeasibilityRun) -> FeasibilityRun:
         raise ValidationError(
             {"detail": "A provider call from this run is still finishing. Try again shortly."}
         )
-    products = list(
-        ProviderProduct.objects.in_realm(run.realm_id)
-        .current()
-        .filter(id__in=run.products.values("id"))
-    )
+    if products is not None:
+        _check_products(run.realm_id, products)
+    else:
+        products = list(
+            ProviderProduct.objects.in_realm(run.realm_id)
+            .current()
+            .filter(id__in=run.products.values("id"))
+        )
     if not products:
         raise ValidationError(
             {"detail": "None of this run's products are offered any more. Start a new run."}

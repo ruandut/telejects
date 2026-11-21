@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  PackageCheck,
   Pause,
   Pencil,
   Play,
@@ -30,6 +31,7 @@ import {
   useRunLive,
   useRunSites,
 } from "@/features/feasibilities/api";
+import { EditProductsDialog } from "@/features/feasibilities/components/edit-products-dialog";
 import { SiteResults } from "@/features/feasibilities/components/site-results";
 import { Progress, RunStatusBadge } from "@/features/feasibilities/components/status";
 import type { Run, SitePage } from "@/features/feasibilities/types";
@@ -88,6 +90,7 @@ function Loaded({ run }: { run: Run }) {
   const exportRun = useExportRun(run.id);
   const rename = useRenameRun(run.id);
   const [renaming, setRenaming] = useState(false);
+  const [editingProducts, setEditingProducts] = useState(false);
   const [state, setState] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -98,6 +101,9 @@ function Loaded({ run }: { run: Run }) {
 
   return (
     <>
+      {editingProducts && (
+        <EditProductsDialog run={run} onClose={() => setEditingProducts(false)} />
+      )}
       {renaming && (
         <NameDialog
           title="Rename run"
@@ -162,6 +168,11 @@ function Loaded({ run }: { run: Run }) {
               onClick={() => action.mutate("retry-failed")}
             >
               <RotateCcw /> Retry failed
+            </Button>
+          )}
+          {canRun && !going && (
+            <Button variant="outline" onClick={() => setEditingProducts(true)}>
+              <PackageCheck /> Edit products
             </Button>
           )}
           {canRun && !going && (

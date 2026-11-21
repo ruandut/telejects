@@ -141,6 +141,14 @@ class RenameRunSerializer(RealmScopedInputSerializer):
     name = serializers.CharField(max_length=100)
 
 
+class RerunSerializer(RealmScopedInputSerializer):
+    """Optional: new products for the run. Without them it runs again with the ones it has."""
+
+    products = serializers.PrimaryKeyRelatedField(
+        queryset=ProviderProduct.objects.all(), many=True, allow_empty=False, required=False
+    )
+
+
 class StartRunSerializer(RealmScopedInputSerializer):
     name = serializers.CharField(max_length=100)
     products = serializers.PrimaryKeyRelatedField(
