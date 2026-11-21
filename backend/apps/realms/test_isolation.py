@@ -59,6 +59,10 @@ COMPANY_ROUTES = [
     "/api/api-clients/",
     "/api/connect-product/",
     "/api/product/",
+    "/api/price-book/definitions/",
+    "/api/price-book/connect-products/",
+    "/api/price-book/options/",
+    "/api/price-book/export/csv/",
     "/api/projects/",
     "/api/boards/templates/",
     "/api/automations/recipes/",
@@ -272,6 +276,12 @@ def test_roles_are_read_only(api, realm):
         "/api/connect-product/1/",
         "/api/product/",
         "/api/product/1/",
+        "/api/price-book/definitions/",
+        "/api/price-book/definitions/1/",
+        "/api/price-book/connect-products/",
+        "/api/price-book/options/",
+        "/api/price-book/export/csv/",
+        "/api/price-book/export/pdf/",
         "/api/projects/",
         "/api/projects/1/",
         "/api/projects/1/members/",
@@ -1393,3 +1403,43 @@ def test_presence_goes_when_a_tab_goes_quiet(api, realm):
     BoardPresence.objects.in_realm(realm).update(last_seen=dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
     assert api.get("/api/presence/", {"board": board["id"]}).json() == []
     assert services.sweep() == 1
+
+
+def test_at_0006_22_the_price_book_pages_follow_permissions_and_the_grant(realm, blue_machine):
+    """Someone who may not quote sees nothing of the price book; a company not offered it sees
+    nothing either; only Telejects staff change it, and a client token can't reach it at all."""
+    from apps.pricebook.models import PriceBook, PriceBookGrant, PriceDefinition
+
+    pages = [
+        "/api/price-book/definitions/",
+        "/api/price-book/definitions/206/",
+        "/api/price-book/connect-products/",
+        "/api/price-book/connect-products/1/",
+        "/api/price-book/options/",
+        "/api/price-book/export/csv/",
+        "/api/price-book/export/pdf/",
+    ]
+    viewer = client_for(member(realm, "viewer@northwind.example", "viewer").user, realm)
+    for path in pages:
+        assert viewer.get(path).status_code == 403, path
+    for path in pages:
+        assert blue_machine["machine"].get(path).status_code == 401, path
+
+    pm = client_for(member(realm, "pm@northwind.example", "project_manager").user, realm)
+    assert pm.get(pages[0]).status_code == 200
+    before = PriceDefinition.objects.get(pk=206).monthly_recurring_cost
+    assert pm.patch(pages[1], {"monthly_recurring_cost": "1"}, format="json").status_code == 403
+    assert pm.put(pages[1], {"monthly_recurring_cost": "1"}, format="json").status_code == 403
+    assert pm.delete(pages[1]).status_code == 403
+    assert PriceDefinition.objects.get(pk=206).monthly_recurring_cost == before
+
+    # Offered to Blue Mast alone: Northwind sees none of it.
+    book = PriceBook.objects.get()
+    book.available_to_all = False
+    book.save()
+    PriceBookGrant.objects.create(realm=blue_machine["realm"], book=book)
+    for path in pages:
+        res = pm.get(path)
+        assert res.status_code == 403 and "Vodacom Products" not in res.content.decode(), path
+    blue = client_for(blue_machine["owner"].user, blue_machine["realm"])
+    assert blue.get(pages[0]).json()["count"] == PriceDefinition.objects.count()

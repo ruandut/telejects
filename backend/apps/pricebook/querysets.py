@@ -31,7 +31,32 @@ class AccessMediumQuerySet(models.QuerySet):
 
 
 class PriceDefinitionQuerySet(models.QuerySet):
-    pass
+    def offered_to(self, realm_id: int):
+        """What a company may read: definitions of the connect products it is offered."""
+        from .models import ConnectProduct
+
+        offered = ConnectProduct.objects.offered_to(realm_id).values("id")
+        return self.filter(connect_products__in=offered).distinct()
+
+    def search(self, text: str):
+        """Rapid's search: the definition's, its product's or its access medium's name."""
+        if not text:
+            return self
+        return self.filter(
+            Q(name__icontains=text)
+            | Q(product__name__icontains=text)
+            | Q(access_medium__name__icontains=text)
+        )
+
+    def filtered(self, *, provider=None, medium=None, product=None):
+        """Rapid's filters. A provider or product that isn't a number matches nothing."""
+        found = self
+        for field, value in (("provider", provider), ("product", product)):
+            if value not in (None, ""):
+                found = found.filter(**{field: value}) if str(value).isdigit() else found.none()
+        if medium:
+            found = found.filter(medium=medium)
+        return found
 
 
 class ConnectProductQuerySet(models.QuerySet):

@@ -7,12 +7,15 @@ offered to the company.
 """
 
 import logging
+from datetime import date
 
+from django.db.models import Prefetch
+from django.http import Http404, HttpResponse
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -21,10 +24,15 @@ from apps.api_clients.authentication import ApiClientAuthentication
 from apps.api_clients.openapi import CLIENT_AUTH
 from apps.realms.permissions import HasRealmPermission, InRealm
 
+from . import books, services
 from . import openapi as docs
-from . import services
-from .models import CatalogueProduct, ConnectProduct, PriceBook
-from .serializers import SingleSiteFeasibilityQuoteSerializer, SingleSiteFeasibilitySerializer
+from .models import CatalogueProduct, ConnectProduct, PriceBook, PriceDefinition
+from .serializers import (
+    ConnectProductInput,
+    PriceDefinitionInput,
+    SingleSiteFeasibilityQuoteSerializer,
+    SingleSiteFeasibilitySerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +259,193 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     def retrieve(self, request, pk=None):
         return Response(services.catalogue_product_data(self.get_object()))
+
+
+# --- the price book in the portal -----------------------------------------------------------------
+# Rapid's price book admin page, for the web app only (JWT, not client tokens, and not in the API
+# docs). Platform staff keep the book here; a member who may quote reads what their company is
+# offered, the same as the quote endpoint prices from.
+
+
+def _staff(request) -> bool:
+    return bool(request.user.is_staff)
+
+
+class PriceBookAccess(BasePermission):
+    """Reading: platform staff, or a member with `feasibilities.quote` whose company is offered
+    the book. Changing it: platform staff alone."""
+
+    message = "Only Telejects staff can change the price book."
+
+    def has_permission(self, request, view):
+        if _staff(request):
+            return True
+        if request.method not in SAFE_METHODS:
+            return False
+        if not request.membership.has_perm("feasibilities.quote"):
+            self.message = "You don't have permission to see the price book."
+            return False
+        if not PriceBook.objects.offered_to(request.realm.id).exists():
+            self.message = PriceBookOffered.message
+            return False
+        return True
+
+
+BOOK = [IsAuthenticated, InRealm, PriceBookAccess]
+
+
+class BookPagination(PageNumberPagination):
+    """Rapid's price book page: 100 a page."""
+
+    page_size = 100
+    page_size_query_param = "page_size"
+    max_page_size = 500
+
+
+def _definitions(request):
+    if _staff(request):
+        return PriceDefinition.objects.all()
+    return PriceDefinition.objects.offered_to(request.realm.id)
+
+
+def _connect_products(request):
+    if _staff(request):
+        return ConnectProduct.objects.all()
+    return ConnectProduct.objects.offered_to(request.realm.id)
+
+
+class PriceDefinitionViewSet(viewsets.ViewSet):
+    """Rapid's `/api/connect-product-definition/`: every price, newest first, searched and
+    filtered by provider, medium and product."""
+
+    permission_classes = BOOK
+    lookup_value_regex = r"\d+"
+
+    def _queryset(self):
+        params = self.request.query_params
+        return (
+            _definitions(self.request)
+            .search(params.get("search_string", ""))
+            .filtered(
+                provider=params.get("provider"),
+                medium=params.get("medium"),
+                product=params.get("product"),
+            )
+            .select_related("product", "access_medium")
+            .prefetch_related(
+                Prefetch(
+                    "connect_products",
+                    queryset=_connect_products(self.request).order_by("id"),
+                    to_attr="visible_connect_products",
+                )
+            )
+            .order_by("-id")
+        )
+
+    def _get(self, pk):
+        definition = self._queryset().filter(pk=pk).first()
+        if definition is None:
+            raise Http404
+        return definition
+
+    def _data(self, definition):
+        return services.definition_data(definition, definition.visible_connect_products)
+
+    def list(self, request):
+        paginator = BookPagination()
+        page = paginator.paginate_queryset(self._queryset(), request, view=self)
+        return paginator.get_paginated_response([self._data(d) for d in page])
+
+    def retrieve(self, request, pk=None):
+        return Response(self._data(self._get(pk)))
+
+    def _save(self, request, definition=None):
+        serializer = PriceDefinitionInput(instance=definition, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = dict(serializer.validated_data)
+        connect_products = values.pop("connect_products", None)
+        saved = services.save_definition(definition, values, connect_products)
+        return self._get(saved.pk)
+
+    def create(self, request):
+        return Response(self._data(self._save(request)), status=status.HTTP_201_CREATED)
+
+    def update(self, request, pk=None):
+        return Response(self._data(self._save(request, self._get(pk))))
+
+    def destroy(self, request, pk=None):
+        services.delete_definition(self._get(pk))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PriceBookConnectProductViewSet(viewsets.ViewSet):
+    """Rapid's "Manage products": the connect products, each with how many prices it has."""
+
+    permission_classes = BOOK
+    lookup_value_regex = r"\d+"
+
+    def _queryset(self):
+        return _connect_products(self.request).order_by("name", "id")
+
+    def _get(self, pk):
+        found = self._queryset().filter(pk=pk).first()
+        if found is None:
+            raise Http404
+        return found
+
+    def _data(self, connect_product):
+        visible = _definitions(self.request).filter(connect_products=connect_product)
+        return {
+            "id": connect_product.id,
+            "name": connect_product.name,
+            "description": connect_product.description,
+            "definition_count": visible.count(),
+        }
+
+    def list(self, request):
+        return Response([self._data(c) for c in self._queryset()])
+
+    def retrieve(self, request, pk=None):
+        return Response(self._data(self._get(pk)))
+
+    def _save(self, request, connect_product=None):
+        serializer = ConnectProductInput(instance=connect_product, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return services.save_connect_product(connect_product, dict(serializer.validated_data))
+
+    def create(self, request):
+        return Response(self._data(self._save(request)), status=status.HTTP_201_CREATED)
+
+    def update(self, request, pk=None):
+        return Response(self._data(self._save(request, self._get(pk))))
+
+    def destroy(self, request, pk=None):
+        services.delete_connect_product(self._get(pk))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PriceBookOptionsView(APIView):
+    """What the price book's filters and forms choose from."""
+
+    permission_classes = BOOK
+
+    def get(self, request):
+        return Response({**services.options_data(), "can_edit": _staff(request)})
+
+
+class PriceBookExportView(APIView):
+    """Rapid's `generate-pricebook-csv` and `-pdf`: staff get the whole book, a member what
+    their company is offered."""
+
+    permission_classes = BOOK
+    kind = "csv"
+
+    def get(self, request):
+        definitions = None if _staff(request) else _definitions(request)
+        name = f"pricebook_{date.today():%Y%m%d}.{self.kind}"
+        if self.kind == "pdf":
+            response = HttpResponse(books.export_pdf(definitions), content_type="application/pdf")
+        else:
+            response = HttpResponse(books.export_csv(definitions), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{name}"'
+        return response

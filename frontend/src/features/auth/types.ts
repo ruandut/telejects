@@ -28,6 +28,8 @@ export type Me = {
   id: number;
   email: string;
   name: string;
+  /** Telejects' own staff, who keep platform data such as the price book. */
+  is_staff: boolean;
   /** The company this tab's requests work in; null when I have none (or lost access). */
   realm: CurrentRealm | null;
   realms: RealmRef[];

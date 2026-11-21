@@ -38,9 +38,8 @@ Per-company price books come later.
     OAuth2 client credentials (decided: Ruan, 2026-11-17).
   - A portal screen for single-site checks and quotes; that is the "single site from a map" spec,
     which will reuse this one's services.
-  - Price book editing in the portal (Rapid's pricebook admin pages and its
-    `connect-product-definition`, `access-medium`, `sublayer-providers` and
-    `generate-pricebook-*` endpoints). Those were Skybird staff tools; here staff use Django admin.
+  - ~~Price book editing in the portal~~: added later in this spec (see "Later: the price book
+    in the portal" below).
   - Per-company price books, margins on the platform book, formal quotes.
   - Quoting Link Africa and Herotel (Rapid doesn't either).
   - Rapid's location cache (`CACHE_ENABLED` is off in Rapid, so every call checks live).
@@ -235,12 +234,35 @@ site checks and their ids never show to another; the price book admin is staff-o
 - When a quote is asked for
 - Then no Link Africa prices are listed, as in Rapid
 
+### AT-0006-19 — Staff keep the price book in the portal
+- Given I am Telejects staff
+- When I add, change and delete a price, and add, rename and delete a connect product
+- Then the price book holds exactly that, and a price's connect products are the ones I ticked
+
+### AT-0006-20 — Staff search, filter and page the price book
+- When I search, or filter by provider, medium or product
+- Then I see the matching prices, newest first, 100 a page
+
+### AT-0006-21 — A price follows Rapid's rules
+- When a price has neither access medium nor product, a provider other than its product's, an
+  access medium for another provider than Vodacom, a cost under zero other than -1, a term over
+  60 months, or the same name, medium or product, term, data and speeds as another price
+- Then it is refused with Rapid's message
+
+### AT-0006-22 — A member who quotes reads what their company is offered
+- Given I may quote (`feasibilities.quote`) and my company is offered the book
+- When I open the price book, or download it as CSV or PDF
+- Then I see only the prices of connect products offered to my company, read-only, and every
+  change is refused; without the permission, or without the book, I see none of it
+
 ## Decisions
 - Only Vodacom and MTN are priced, as in Rapid (Ruan, 2026-11-17).
 - `timeout` defaults to 50 seconds, Rapid's request default.
 - The PDF's provider logos are copied from Rapid into the repo.
 - One spec: API clients are built here, as the first thing these endpoints need.
 - The price book is offered to every company by default, matching 0004 as it now stands.
+- In the portal, Telejects staff edit the price book; a member who may quote reads it (Ruan,
+  2026-11-21).
 
 ## Implementation notes
 
@@ -281,6 +303,31 @@ site checks and their ids never show to another; the price book admin is staff-o
   exactly the client endpoints, and fails on any schema warning.
 - Redoc loads from jsDelivr, pinned to 2.5.0 (`REDOC_DIST`): its latest no longer ships the
   standalone script. The page is kept light, as Redoc has no dark theme.
+
+**Later: the price book in the portal** (Ruan, 2026-11-21).
+- The sidebar's **Feasibilities** is a submenu: **Bulk runs** (`/feasibilities`) and **Price
+  book** (`/price-book`).
+- The page is Rapid's price book page: every price, newest first, 100 a page, searched by name,
+  product or access medium and filtered by provider and medium, with CSV and PDF downloads.
+  Telejects staff (`is_staff`, now on `/api/auth/me/`) also get **Add price**, a price's own
+  dialog (Rapid's fields, "on request only" for -1, and the connect products it is quoted in),
+  **Manage products** for connect products, and a warning on a price Rapid would have flagged
+  (in no connect product, Vodacom without an access medium, no product, no network). Everyone
+  else with `feasibilities.quote` reads the prices of the connect products their company is
+  offered, and downloads just those.
+- The endpoints are the web app's own, JWT only and not in the API docs, under
+  `/api/price-book/`: `definitions/` (list, detail, create, `PUT`, delete), `connect-products/`
+  (the same), `options/` (providers, networks, mediums, access media and products to choose
+  from, and `can_edit`) and `export/csv/` and `export/pdf/`. Rapid's own paths for these
+  (`connect-product-definition`, writes on `connect-product`) aren't copied: they were staff
+  tools, and `/api/connect-product/` stays the client endpoint, read-only and frozen.
+- Reading needs staff, or `feasibilities.quote` and the book offered (`PriceBookAccess`);
+  changing needs staff. Staff work in a company like anyone (X-Realm), so these routes are
+  company-gated, and isolation tests cover a viewer, a client token, a project manager trying to
+  change a price, and a company not offered the book.
+- Checked in the running app as staff (dark, adding a network to a price, Manage products) and
+  as a project manager (light, read-only, the CSV), and at phone width (cards, no sideways
+  scroll), with the tests' invented book loaded and removed afterwards.
 
 **Deviations from the design, and why.**
 - **One-site checks are their own app** (`site_checks`), not part of `feasibilities`: the map

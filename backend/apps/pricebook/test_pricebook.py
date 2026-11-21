@@ -717,3 +717,215 @@ def test_offered_books_follow_the_grant(acme, book):
     book.available_to_all = False
     book.save()
     assert list(PriceBook.objects.offered_to(acme.id)) == []
+
+
+# --- the price book in the portal (Rapid's price book admin page) --------------------------------
+
+
+@pytest.fixture
+def staff_api(realm, book):
+    """Telejects staff, working in Northwind like any member."""
+    staff = member(realm, "keeper@telejects.example", "viewer").user
+    staff.is_staff = True
+    staff.save()
+    return client_for(staff, realm)
+
+
+NEW_PRICE = {
+    "name": "Sky Connect Fibre Max",
+    "access_medium": 488,
+    "product": 24,
+    "duration": 24,
+    "monthly_recurring_cost": "-1",
+    "none_recurring_cost": "0",
+    "data_allocation": None,
+    "data_allocation_notes": "Uncapped",
+    "max_bandwidth": 500,
+    "max_upload_bandwidth": 250,
+    "medium": "Fibre",
+    "sublayer": 10,
+    "connect_products": [1, 5],
+}
+
+
+def test_at_0006_19_staff_keep_the_price_book_in_the_portal(staff_api):
+    res = staff_api.post("/api/price-book/definitions/", NEW_PRICE, format="json")
+    assert res.status_code == 201, res.json()
+    made = res.json()
+    assert made == {
+        "id": made["id"],
+        "access_medium": {
+            "id": 488,
+            "name": "Fibre",
+            "provider_access_medium_identifier_id": 20,
+            "product": None,
+        },
+        "product": {"id": 24, "name": "Business Fibre", "provider_name": "Vodacom"},
+        "connect_products": [
+            {"id": 1, "name": "Vodacom Products"},
+            {"id": 5, "name": "Connect MTN"},
+        ],
+        "name": "Sky Connect Fibre Max",
+        "provider": VODACOM,
+        "sublayer": 10,
+        "duration": 24,
+        "monthly_recurring_cost": "-1.00",
+        "none_recurring_cost": "0.00",
+        "data_allocation": None,
+        "data_allocation_notes": "Uncapped",
+        "max_bandwidth": 500,
+        "max_upload_bandwidth": 250,
+        "medium": "Fibre",
+    }
+    path = f"/api/price-book/definitions/{made['id']}/"
+    changed = {**NEW_PRICE, "monthly_recurring_cost": "3199.00", "connect_products": [1]}
+    res = staff_api.put(path, changed, format="json")
+    assert res.status_code == 200
+    assert res.json()["monthly_recurring_cost"] == "3199.00"
+    assert [c["id"] for c in res.json()["connect_products"]] == [1]
+    assert staff_api.delete(path).status_code == 204
+    assert not PriceDefinition.objects.filter(pk=made["id"]).exists()
+
+    # Connect products: made, renamed and removed; their prices stay.
+    res = staff_api.post(
+        "/api/price-book/connect-products/",
+        {"name": "Sky Connect Business", "description": "Business lines"},
+        format="json",
+    )
+    assert res.status_code == 201
+    created = res.json()
+    assert created == {
+        "id": created["id"],
+        "name": "Sky Connect Business",
+        "description": "Business lines",
+        "definition_count": 0,
+    }
+    assert ConnectProduct.objects.get(pk=created["id"]).book.name == "Telejects"
+    path = f"/api/price-book/connect-products/{created['id']}/"
+    res = staff_api.put(path, {"name": "Sky Connect Biz"}, format="json")
+    assert res.json()["name"] == "Sky Connect Biz"
+    listed = staff_api.get("/api/price-book/connect-products/").json()
+    assert [(c["id"], c["definition_count"]) for c in listed if c["id"] in (1, 5)] == [
+        (5, 2),
+        (1, 5),
+    ]
+    assert staff_api.delete("/api/price-book/connect-products/5/").status_code == 204
+    assert PriceDefinition.objects.filter(pk__in=[220, 221]).count() == 2
+
+
+def test_at_0006_20_staff_search_filter_and_page_the_price_book(staff_api):
+    def ids(query=""):
+        body = staff_api.get(f"/api/price-book/definitions/?{query}").json()
+        return [row["id"] for row in body["results"]]
+
+    assert ids() == [230, 221, 220, 211, 210, 208, 207, 206]  # newest first, as in Rapid
+    assert ids("search_string=lte") == [210]  # the definition's name
+    assert ids("search_string=business fibre 100") == [221, 220]  # its product's name
+    assert ids("provider=1") == [221, 220]
+    assert ids("medium=LTE") == [210]
+    assert ids("product=24") == [208, 207, 206]
+    assert ids("provider=x") == []
+    body = staff_api.get("/api/price-book/definitions/?page_size=3&page=2").json()
+    assert body["count"] == 8 and [r["id"] for r in body["results"]] == [211, 210, 208]
+    assert staff_api.get("/api/price-book/definitions/").json()["next"] is None  # 100 a page
+
+    options = staff_api.get("/api/price-book/options/").json()
+    assert options["can_edit"] is True
+    assert options["providers"][:2] == [
+        {"value": 0, "label": "Vodacom"},
+        {"value": 1, "label": "MTN"},
+    ]
+    assert options["mediums"][:5] == ["Fibre", "Wireless", "LTE", "5G", "Wireless and Fibre"]
+    assert {"value": 10, "label": "Vumatel"} in options["sublayers"]
+    assert [m["id"] for m in options["access_media"]] == [488, 453]
+
+
+@pytest.mark.parametrize(
+    "change, errors",
+    [
+        ({"access_medium": None, "product": None}, {
+            "non_field_errors": ["Either product or access_medium must be set."]}),
+        ({"product": 32, "provider": 0}, {
+            "provider": ["Provider must match the product's provider."]}),
+        ({"product": None, "provider": 1}, {
+            "provider": ["Only Vodacom can use access_medium without a product."]}),
+        ({"product": 32, "provider": None}, {
+            "access_medium": ["Only Vodacom prices an access medium."]}),
+        ({"monthly_recurring_cost": "-5"}, {
+            "monthly_recurring_cost": ["A cost is zero or more, or -1 for price on request."]}),
+        ({"duration": 61}, {"duration": ["Ensure this value is less than or equal to 60."]}),
+        ({"name": "Sky Connect Prem ( Fibre )", "duration": 12, "max_bandwidth": 1000,
+          "max_upload_bandwidth": 1000}, {
+            "non_field_errors": ["The price book already has this price, with this term."]}),
+    ],
+)  # fmt: skip
+def test_at_0006_21_a_price_follows_rapids_rules(staff_api, change, errors):
+    res = staff_api.post("/api/price-book/definitions/", {**NEW_PRICE, **change}, format="json")
+    assert res.status_code == 400
+    assert res.json() == errors
+
+
+def test_an_mtn_price_takes_its_provider_from_its_product(staff_api):
+    body = {**NEW_PRICE, "access_medium": None, "product": 32, "provider": None}
+    res = staff_api.post("/api/price-book/definitions/", body, format="json")
+    assert res.status_code == 201 and res.json()["provider"] == MTN
+
+
+def test_at_0006_22_a_member_who_quotes_reads_what_their_company_is_offered(api, realm, book):
+    """Northwind's Admin may quote: they see the offered book read-only, and nothing of a book
+    Northwind isn't offered, even on a price both books share."""
+    other = PriceBook.objects.create(name="Reseller", available_to_all=False)
+    hidden = ConnectProduct.objects.create(name="Reseller Fibre", book=other)
+    secret = PriceDefinition.objects.create(
+        name="Reseller only", product_id=32, provider=MTN, monthly_recurring_cost=Decimal("1"),
+        none_recurring_cost=Decimal("0"), max_bandwidth=10, max_upload_bandwidth=10,
+    )  # fmt: skip
+    hidden.product_definitions.set([secret, PriceDefinition.objects.get(pk=206)])
+
+    body = api.get("/api/price-book/definitions/").json()
+    assert [r["id"] for r in body["results"]] == [230, 221, 220, 211, 210, 208, 207, 206]
+    shared = body["results"][-1]
+    assert shared["connect_products"] == [{"id": 1, "name": "Vodacom Products"}]
+    assert "Reseller" not in api.get("/api/price-book/definitions/").content.decode()
+    assert api.get(f"/api/price-book/definitions/{secret.id}/").status_code == 404
+    listed = api.get("/api/price-book/connect-products/").json()
+    assert [c["name"] for c in listed] == ["Connect Link Africa", "Connect MTN", "Vodacom Products"]
+    assert api.get(f"/api/price-book/connect-products/{hidden.id}/").status_code == 404
+    assert api.get("/api/price-book/options/").json()["can_edit"] is False
+
+    csv_file = api.get("/api/price-book/export/csv/")
+    assert csv_file.status_code == 200 and csv_file["Content-Type"] == "text/csv"
+    lines = csv_file.content.decode().splitlines()
+    assert len(lines) == 1 + 8 and "Reseller" not in csv_file.content.decode()
+    pdf = api.get("/api/price-book/export/pdf/")
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+    # Read-only: every change is refused, and nothing changed.
+    before = book_state()
+    assert api.post("/api/price-book/definitions/", NEW_PRICE, format="json").status_code == 403
+    assert api.put("/api/price-book/definitions/206/", NEW_PRICE, format="json").status_code == 403
+    assert api.delete("/api/price-book/definitions/206/").status_code == 403
+    assert (
+        api.post("/api/price-book/connect-products/", {"name": "Mine"}, format="json").status_code
+        == 403
+    )
+    assert (
+        api.put("/api/price-book/connect-products/1/", {"name": "x"}, format="json").status_code
+        == 403
+    )
+    assert api.delete("/api/price-book/connect-products/1/").status_code == 403
+    assert book_state() == before
+
+
+def test_staff_see_and_export_every_book(staff_api):
+    other = PriceBook.objects.create(name="Reseller", available_to_all=False)
+    ConnectProduct.objects.create(name="Reseller Fibre", book=other)
+    names = [c["name"] for c in staff_api.get("/api/price-book/connect-products/").json()]
+    assert "Reseller Fibre" in names
+    lines = staff_api.get("/api/price-book/export/csv/").content.decode().splitlines()
+    assert len(lines) == 1 + PriceDefinition.objects.count()
+
+
+def test_me_says_whether_i_am_telejects_staff(api, staff_api):
+    assert api.get("/api/auth/me/").json()["is_staff"] is False
+    assert staff_api.get("/api/auth/me/").json()["is_staff"] is True

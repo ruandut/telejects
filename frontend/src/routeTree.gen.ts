@@ -25,6 +25,7 @@ import { Route as AppIntegrationsConnectionIdRouteImport } from './routes/_app/i
 import { Route as AppLogsIndexRouteImport } from './routes/_app/logs/index'
 import { Route as AppLogsLogIdRouteImport } from './routes/_app/logs/$logId'
 import { Route as AppPortfolioIndexRouteImport } from './routes/_app/portfolio/index'
+import { Route as AppPriceBookIndexRouteImport } from './routes/_app/price-book/index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
 import { Route as AppProjectsProjectIdRouteRouteImport } from './routes/_app/projects/$projectId/route'
 import { Route as AppUsersIndexRouteImport } from './routes/_app/users/index'
@@ -114,6 +115,11 @@ const AppPortfolioIndexRoute = AppPortfolioIndexRouteImport.update({
   path: '/portfolio/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPriceBookIndexRoute = AppPriceBookIndexRouteImport.update({
+  id: '/price-book/',
+  path: '/price-book/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/integrations/': typeof AppIntegrationsIndexRoute
   '/logs/': typeof AppLogsIndexRoute
   '/portfolio/': typeof AppPortfolioIndexRoute
+  '/price-book/': typeof AppPriceBookIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/users/': typeof AppUsersIndexRoute
   '/projects/$projectId/access': typeof AppProjectsProjectIdAccessRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/integrations': typeof AppIntegrationsIndexRoute
   '/logs': typeof AppLogsIndexRoute
   '/portfolio': typeof AppPortfolioIndexRoute
+  '/price-book': typeof AppPriceBookIndexRoute
   '/projects': typeof AppProjectsIndexRoute
   '/users': typeof AppUsersIndexRoute
   '/projects/$projectId/access': typeof AppProjectsProjectIdAccessRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/_app/integrations/': typeof AppIntegrationsIndexRoute
   '/_app/logs/': typeof AppLogsIndexRoute
   '/_app/portfolio/': typeof AppPortfolioIndexRoute
+  '/_app/price-book/': typeof AppPriceBookIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/users/': typeof AppUsersIndexRoute
   '/_app/projects/$projectId/access': typeof AppProjectsProjectIdAccessRoute
@@ -246,6 +255,7 @@ export interface FileRouteTypes {
     | '/integrations/'
     | '/logs/'
     | '/portfolio/'
+    | '/price-book/'
     | '/projects/'
     | '/users/'
     | '/projects/$projectId/access'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/logs'
     | '/portfolio'
+    | '/price-book'
     | '/projects'
     | '/users'
     | '/projects/$projectId/access'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/_app/integrations/'
     | '/_app/logs/'
     | '/_app/portfolio/'
+    | '/_app/price-book/'
     | '/_app/projects/'
     | '/_app/users/'
     | '/_app/projects/$projectId/access'
@@ -421,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPortfolioIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/price-book/': {
+      id: '/_app/price-book/'
+      path: '/price-book'
+      fullPath: '/price-book/'
+      preLoaderRoute: typeof AppPriceBookIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/projects/': {
       id: '/_app/projects/'
       path: '/projects'
@@ -520,6 +539,7 @@ interface AppRouteChildren {
   AppIntegrationsIndexRoute: typeof AppIntegrationsIndexRoute
   AppLogsIndexRoute: typeof AppLogsIndexRoute
   AppPortfolioIndexRoute: typeof AppPortfolioIndexRoute
+  AppPriceBookIndexRoute: typeof AppPriceBookIndexRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
   AppUsersIndexRoute: typeof AppUsersIndexRoute
 }
@@ -537,6 +557,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppIntegrationsIndexRoute: AppIntegrationsIndexRoute,
   AppLogsIndexRoute: AppLogsIndexRoute,
   AppPortfolioIndexRoute: AppPortfolioIndexRoute,
+  AppPriceBookIndexRoute: AppPriceBookIndexRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
   AppUsersIndexRoute: AppUsersIndexRoute,
 }

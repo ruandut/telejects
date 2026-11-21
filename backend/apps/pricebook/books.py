@@ -226,13 +226,20 @@ def _or_blank(value) -> str:
     return "" if value in (None, 0) else value
 
 
-def export_csv() -> str:
-    """Rapid's price book CSV: Vodacom first, by access medium; then the other providers."""
+def export_csv(definitions=None) -> str:
+    """Rapid's price book CSV: Vodacom first, by access medium; then the other providers.
+    Every definition, or just `definitions` (what a company may see)."""
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(EXPORT_COLUMNS)
-    definitions = PriceDefinition.objects.select_related("product", "access_medium")
-    mediums = AccessMedium.objects.filter(definitions__provider=VODACOM).distinct().order_by("name")
+    if definitions is None:
+        definitions = PriceDefinition.objects.all()
+    definitions = definitions.select_related("product", "access_medium")
+    mediums = (
+        AccessMedium.objects.filter(definitions__in=definitions.filter(provider=VODACOM))
+        .distinct()
+        .order_by("name")
+    )
     for medium in mediums:
         rows = definitions.filter(access_medium=medium, provider=VODACOM).order_by(
             "max_bandwidth", "duration", "name"
@@ -264,9 +271,10 @@ def _export_row(d: PriceDefinition, provider: str, medium: str) -> list:
     ]
 
 
-def export_pdf() -> bytes:
+def export_pdf(definitions=None) -> bytes:
     """The price book as a PDF, landscape A4: a section per medium, then per sublayer (with its
-    logo) and provider product, each a table of its definitions."""
+    logo) and provider product, each a table of its definitions. Every definition, or just
+    `definitions` (what a company may see)."""
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4, landscape
@@ -312,7 +320,9 @@ def export_pdf() -> bytes:
         ),
     ]
     by_medium: dict[str, dict] = defaultdict(lambda: defaultdict(list))
-    definitions = PriceDefinition.objects.select_related("product", "access_medium").order_by(
+    if definitions is None:
+        definitions = PriceDefinition.objects.all()
+    definitions = definitions.select_related("product", "access_medium").order_by(
         "medium", "sublayer", "max_bandwidth", "name", "id"
     )
     for d in definitions:

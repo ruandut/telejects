@@ -3,6 +3,8 @@ import {
   ChartPie,
   ChevronRight,
   ChevronsUpDown,
+  BookOpen,
+  ListChecks,
   CodeXml,
   FolderKanban,
   LayoutDashboard,
@@ -54,6 +56,10 @@ type NavItem = {
   exact?: boolean;
   /** Shown only to people with this permission in the tab's company. */
   needs?: Permission;
+  /** Telejects staff see it too, whatever their permissions. */
+  staff?: boolean;
+  /** A submenu. The item itself opens the first child I may open. */
+  children?: NavItem[];
 };
 
 /** The menu, in sections. A section with nothing I may open is left out. */
@@ -68,7 +74,21 @@ const SECTIONS: { label: string; items: NavItem[] }[] = [
         to: "/feasibilities",
         label: "Feasibilities",
         icon: MapPinned,
-        needs: "feasibilities.view",
+        children: [
+          {
+            to: "/feasibilities",
+            label: "Bulk runs",
+            icon: ListChecks,
+            needs: "feasibilities.view",
+          },
+          {
+            to: "/price-book",
+            label: "Price book",
+            icon: BookOpen,
+            needs: "feasibilities.quote",
+            staff: true,
+          },
+        ],
       },
     ],
   },
@@ -99,10 +119,16 @@ function useCloseOnMobile() {
 export function AppSidebar() {
   const matchRoute = useMatchRoute();
   const closeOnMobile = useCloseOnMobile();
-  const permissions = useMe().data?.realm?.permissions ?? [];
+  const me = useMe().data;
+  const permissions = me?.realm?.permissions ?? [];
+  const allowed = (item: NavItem) =>
+    !item.needs || permissions.includes(item.needs) || (!!item.staff && !!me?.is_staff);
   const sections = SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => !item.needs || permissions.includes(item.needs)),
+    items: section.items
+      .filter(allowed)
+      .map((item) => (item.children ? { ...item, children: item.children.filter(allowed) } : item))
+      .filter((item) => !item.children || item.children.length),
   })).filter((section) => section.items.length);
 
   return (
@@ -124,6 +150,8 @@ export function AppSidebar() {
                       active={!!matchRoute({ to: item.to, fuzzy: true })}
                       onNavigate={closeOnMobile}
                     />
+                  ) : item.children ? (
+                    <SubmenuItem key={item.label} item={item} onNavigate={closeOnMobile} />
                   ) : (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton
@@ -214,6 +242,47 @@ function ProjectsItem({
             </CollapsibleContent>
           </>
         )}
+      </SidebarMenuItem>
+    </Collapsible>
+  );
+}
+
+/** An item with a submenu that opens on its chevron, like Projects. The item itself opens the
+ * first child, so it still works as one icon when the sidebar is collapsed. */
+function SubmenuItem({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {
+  const matchRoute = useMatchRoute();
+  const children = item.children ?? [];
+  const isActive = (child: NavItem) => !!matchRoute({ to: child.to, fuzzy: !child.exact });
+  const active = children.some(isActive);
+  return (
+    <Collapsible asChild defaultOpen className="group/collapsible">
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+          <Link to={children[0].to} onClick={onNavigate}>
+            <item.icon className="size-4" />
+            <span>{item.label}</span>
+          </Link>
+        </SidebarMenuButton>
+        <CollapsibleTrigger
+          className="absolute top-1.5 right-1 flex size-5 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden"
+          aria-label={`Show ${item.label.toLowerCase()} menu`}
+        >
+          <ChevronRight className="size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {children.map((child) => (
+              <SidebarMenuSubItem key={child.to}>
+                <SidebarMenuSubButton asChild isActive={isActive(child)}>
+                  <Link to={child.to} onClick={onNavigate}>
+                    <child.icon />
+                    <span>{child.label}</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
       </SidebarMenuItem>
     </Collapsible>
   );

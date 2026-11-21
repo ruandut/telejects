@@ -343,3 +343,92 @@ def quote(realm_id, *, latitude, longitude, connect_products, timeout, user=None
                 }
             )
     return {"success": True, "exceptions": exceptions, "notice": NOTICE, "data": data}
+
+
+# --- the price book in the portal: Rapid's price book admin page --------------------------------
+
+# Rapid's connection mediums (ConnectionMediumSelect).
+MEDIUMS = ["Fibre", "Wireless", "LTE", "5G", "Wireless and Fibre"]
+
+
+def definition_data(definition: PriceDefinition, connect_products=None) -> dict:
+    """Rapid's ConnectProductDefinitionSerializer (`/api/connect-product-definition/`), with
+    `connect_products` limited to the ones given (those the reader may see)."""
+    if connect_products is None:
+        connect_products = definition.connect_products.all()
+    return {
+        "id": definition.id,
+        "access_medium": (
+            access_medium_data(definition.access_medium) if definition.access_medium else None
+        ),
+        "product": product_data(definition.product),
+        "connect_products": [
+            {"id": c.id, "name": c.name} for c in sorted(connect_products, key=lambda c: c.id)
+        ],
+        "name": definition.name,
+        "provider": definition.provider,
+        "sublayer": definition.sublayer,
+        "duration": definition.duration,
+        "monthly_recurring_cost": money(definition.monthly_recurring_cost),
+        "none_recurring_cost": money(definition.none_recurring_cost),
+        "data_allocation": definition.data_allocation,
+        "data_allocation_notes": definition.data_allocation_notes,
+        "max_bandwidth": definition.max_bandwidth,
+        "max_upload_bandwidth": definition.max_upload_bandwidth,
+        "medium": definition.medium,
+    }
+
+
+def options_data() -> dict:
+    """What the price book's filters and forms choose from."""
+    from .models import PROVIDERS, SublayerProvider
+
+    used = PriceDefinition.objects.exclude(medium__isnull=True).exclude(medium="")
+    mediums = list(dict.fromkeys([*MEDIUMS, *used.values_list("medium", flat=True).distinct()]))
+    return {
+        "providers": [{"value": number, "label": name} for number, name in PROVIDERS],
+        "sublayers": [{"value": c.value, "label": c.label} for c in SublayerProvider],
+        "mediums": mediums,
+        "access_media": [
+            {"id": m.id, "name": m.name, "identifier": m.provider_access_medium_identifier_id}
+            for m in AccessMedium.objects.order_by("name", "id")
+        ],
+        "products": [
+            {"id": p.id, "name": p.name, "provider": p.provider}
+            for p in CatalogueProduct.objects.order_by("name", "id")
+        ],
+    }
+
+
+@transaction.atomic
+def save_definition(
+    definition: PriceDefinition | None, values: dict, connect_products: list | None
+) -> PriceDefinition:
+    """Create or change a definition, as Rapid's price book admin did. With `connect_products`
+    given, the definition belongs to exactly those afterwards."""
+    definition = definition or PriceDefinition()
+    for name, value in values.items():
+        setattr(definition, name, value)
+    definition.save()
+    if connect_products is not None:
+        definition.connect_products.set(connect_products)
+    return definition
+
+
+def delete_definition(definition: PriceDefinition) -> None:
+    definition.delete()
+
+
+def save_connect_product(connect_product: ConnectProduct | None, values: dict) -> ConnectProduct:
+    from . import books
+
+    connect_product = connect_product or ConnectProduct(book=books.default_book())
+    for name, value in values.items():
+        setattr(connect_product, name, value)
+    connect_product.save()
+    return connect_product
+
+
+def delete_connect_product(connect_product: ConnectProduct) -> None:
+    """Its definitions stay, as in Rapid: they may belong to other connect products."""
+    connect_product.delete()

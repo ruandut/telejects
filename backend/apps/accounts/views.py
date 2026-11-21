@@ -38,6 +38,8 @@ def me(request):
             "id": user.id,
             "email": user.email,
             "name": current.display_name if current else user.display_name,
+            # Telejects' own staff, who keep platform data such as the price book (0006).
+            "is_staff": user.is_staff,
             "realm": _current(current) if current else None,
             "realms": [
                 {"id": m.realm_id, "name": m.realm.name}

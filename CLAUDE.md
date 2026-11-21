@@ -114,6 +114,10 @@ companies is the worst bug this system can have.
   `request.membership.has_perm(code)`, the frontend `usePermission(code)`. A spec that adds a
   capability adds its codes and says which built-in roles get them. Roles are per-company rows
   (built-in ones read their permissions from code), so custom roles can come later.
+- **Platform data is Telejects staff's.** Rows that belong to Telejects rather than a company
+  (the price book, platform accounts) are changed only by staff: `user.is_staff`, in Django admin
+  or, for the price book, in the portal (`pricebook.views.PriceBookAccess`; `is_staff` is on
+  `/api/auth/me/`). Never a company role, and never a permission code a company can hold.
 - An endpoint that works across companies, or before sign-in, opts out explicitly and is added
   to the allowlist in `apps/realms/test_isolation.py` with a reason.
 - **API client tokens (0006) work only where a view opts in** with
