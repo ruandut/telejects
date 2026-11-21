@@ -12,18 +12,20 @@ import { useRoles, useUsers } from "@/features/users/api";
 import { RemoveUserDialog } from "@/features/users/components/remove-user-dialog";
 import { UserDialog } from "@/features/users/components/user-dialog";
 import { UserTable } from "@/features/users/components/user-table";
+import { ProjectAccessDialog } from "@/features/projects/components/person-access-dialog";
 import type { CompanyUser } from "@/features/users/types";
 
 export const Route = createFileRoute("/_app/users/")({
   component: UsersPage,
 });
 
-type Open = { kind: "add" } | { kind: "edit" | "remove"; user: CompanyUser } | null;
+type Open = { kind: "add" } | { kind: "edit" | "remove" | "projects"; user: CompanyUser } | null;
 
 function UsersPage() {
   const me = useMe();
   const canView = usePermission("users.view");
   const canManage = usePermission("users.manage");
+  const canShare = usePermission("projects.manage");
 
   // The server refuses these requests too; this just says so nicely.
   if (me.data && !canView) {
@@ -38,15 +40,19 @@ function UsersPage() {
       </div>
     );
   }
-  return <UserManagement companyName={me.data?.realm?.name} canManage={canManage} />;
+  return (
+    <UserManagement companyName={me.data?.realm?.name} canManage={canManage} canShare={canShare} />
+  );
 }
 
 function UserManagement({
   companyName,
   canManage,
+  canShare,
 }: {
   companyName: string | undefined;
   canManage: boolean;
+  canShare: boolean;
 }) {
   const users = useUsers();
   const roles = useRoles();
@@ -117,6 +123,7 @@ function UserManagement({
             users={shown}
             onEdit={canManage ? (user) => setOpen({ kind: "edit", user }) : null}
             onRemove={canManage ? (user) => setOpen({ kind: "remove", user }) : null}
+            onProjects={canShare ? (user) => setOpen({ kind: "projects", user }) : null}
           />
         ) : users.error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -132,6 +139,9 @@ function UserManagement({
 
       {open?.kind === "add" && <UserDialog user={null} onClose={() => setOpen(null)} />}
       {open?.kind === "edit" && <UserDialog user={open.user} onClose={() => setOpen(null)} />}
+      {open?.kind === "projects" && (
+        <ProjectAccessDialog user={open.user} onClose={() => setOpen(null)} />
+      )}
       {open?.kind === "remove" && (
         <RemoveUserDialog user={open.user} users={users.data ?? []} onClose={() => setOpen(null)} />
       )}

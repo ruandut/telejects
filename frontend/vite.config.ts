@@ -16,6 +16,9 @@ export default defineConfig({
       // TanStack file routes export `Route` next to their components by design.
       "react/only-export-components": "off",
       "vite-plus/prefer-vite-plus-imports": "error",
+      // Never the browser's own alert/confirm/prompt: use the shadcn dialogs (ConfirmDialog,
+      // NameDialog in src/components). See frontend/CLAUDE.md.
+      "no-alert": "error",
     },
     options: { typeAware: true, typeCheck: true },
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],

@@ -4,6 +4,7 @@ Clients are looked up through `in_realm(request.realm)`, so another company's is
 creating and revoking them needs `api_clients.manage`.
 """
 
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from oauth2_provider.views import TokenView
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -16,7 +17,7 @@ from apps.realms.access import RealmScopedMixin
 from apps.realms.access_control import PERMISSIONS
 from apps.realms.permissions import HasRealmPermission, InRealm
 
-from . import services
+from . import openapi, services
 from .models import ApiClient
 from .serializers import ApiClientSerializer, CreateApiClientSerializer
 
@@ -57,6 +58,18 @@ class ApiClientViewSet(
         return Response(ApiClientSerializer(client).data)
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="oauth_token",
+        summary="Get an access token",
+        description="OAuth2 client credentials. Send the client ID and secret in the form, or as "
+        "HTTP Basic auth. The token lasts an hour; ask for a new one when it runs out.",
+        tags=["Authentication"],
+        auth=[],
+        request={"application/x-www-form-urlencoded": openapi.Token},
+        responses={200: openapi.TokenResponse, 400: openapi.TokenError, 401: openapi.TokenError},
+    )
+)
 class ClientTokenView(APIView):
     """OAuth2 client credentials: a client's id and secret for an access token (an hour).
 

@@ -1,6 +1,6 @@
 import type { ProductType } from "@/features/integrations/types";
 
-export type RunStatus = "queued" | "running" | "completed" | "cancelled";
+export type RunStatus = "queued" | "running" | "paused" | "completed" | "cancelled";
 
 export type RunProduct = {
   id: number;

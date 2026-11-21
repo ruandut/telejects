@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { NoAccess } from "@/components/no-access";
 import { SettingsSection } from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/features/auth/api";
@@ -139,26 +140,27 @@ function Loaded({ connection }: { connection: Connection }) {
                 {connection.enabled ? "Turn off" : "Turn on"}
               </Button>
             )}
-            <Button
-              variant="outline"
-              className="text-destructive"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    `Remove ${connection.name}? Runs that used it keep their results.`,
-                  )
-                )
-                  return;
+            <ConfirmDialog
+              title={`Remove ${connection.name}?`}
+              description="Runs that used it keep their results."
+              confirmLabel={
+                <>
+                  <Trash2 /> Remove
+                </>
+              }
+              destructive
+              onConfirm={() =>
                 remove.mutate(undefined, {
                   onSuccess: (result) => {
                     if (!result) void navigate({ to: "/integrations" });
                   },
-                });
-              }}
+                })
+              }
             >
-              <Trash2 /> Remove
-            </Button>
+              <Button variant="outline" className="text-destructive" disabled={remove.isPending}>
+                <Trash2 /> Remove
+              </Button>
+            </ConfirmDialog>
           </div>
         </SettingsSection>
       )}
@@ -224,22 +226,17 @@ function Credentials({
         }
       />
       {!platform && connection.can_use_platform && (
-        <Button
-          variant="outline"
-          className="justify-self-start"
-          disabled={update.isPending}
-          onClick={() => {
-            if (
-              !window.confirm(
-                "Use Telejects' account instead? Your saved credentials for this provider will be deleted.",
-              )
-            )
-              return;
-            update.mutate({ credentials: "platform" });
-          }}
+        <ConfirmDialog
+          title="Use Telejects' account instead?"
+          description="Your saved credentials for this provider will be deleted."
+          confirmLabel="Use Telejects' account"
+          destructive
+          onConfirm={() => update.mutate({ credentials: "platform" })}
         >
-          Use Telejects' account instead
-        </Button>
+          <Button variant="outline" className="justify-self-start" disabled={update.isPending}>
+            Use Telejects' account instead
+          </Button>
+        </ConfirmDialog>
       )}
     </div>
   );

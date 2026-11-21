@@ -1,4 +1,4 @@
-import { Ellipsis, Mail, Pencil, Trash2, UserX } from "lucide-react";
+import { Ellipsis, FolderKey, Mail, Pencil, Trash2, UserX } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ type Actions = {
   /** Null when I may only look. */
   onEdit: ((user: CompanyUser) => void) | null;
   onRemove: ((user: CompanyUser) => void) | null;
+  /** Which projects they can open (0007); null without `projects.manage`. */
+  onProjects: ((user: CompanyUser) => void) | null;
 };
 
 const joined = new Intl.DateTimeFormat("en-ZA", {
@@ -127,9 +129,9 @@ function Status({ user }: { user: CompanyUser }) {
   );
 }
 
-function RowMenu({ user, onEdit, onRemove }: { user: CompanyUser } & Actions) {
+function RowMenu({ user, onEdit, onRemove, onProjects }: { user: CompanyUser } & Actions) {
   const resend = useResendInvitation();
-  if (!onEdit || !onRemove) return null;
+  if (!onEdit && !onProjects) return null;
   const invited = user.status === "invited";
   return (
     <DropdownMenu>
@@ -139,18 +141,29 @@ function RowMenu({ user, onEdit, onRemove }: { user: CompanyUser } & Actions) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onEdit(user)}>
-          <Pencil /> Edit name or role
-        </DropdownMenuItem>
-        {invited && (
+        {onEdit && (
+          <DropdownMenuItem onSelect={() => onEdit(user)}>
+            <Pencil /> Edit name or role
+          </DropdownMenuItem>
+        )}
+        {onProjects && (
+          <DropdownMenuItem onSelect={() => onProjects(user)}>
+            <FolderKey /> Project access
+          </DropdownMenuItem>
+        )}
+        {onEdit && invited && (
           <DropdownMenuItem onSelect={() => resend.mutate(user)}>
             <Mail /> Resend invitation
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => onRemove(user)}>
-          {invited ? <UserX /> : <Trash2 />} {invited ? "Cancel invitation" : "Remove"}
-        </DropdownMenuItem>
+        {onRemove && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => onRemove(user)}>
+              {invited ? <UserX /> : <Trash2 />} {invited ? "Cancel invitation" : "Remove"}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

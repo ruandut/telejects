@@ -210,7 +210,9 @@ All realm-scoped, under `/api/integrations/` and `/api/feasibilities/`:
 - Products: list per connection, filter by type and retired.
 - Runs: list, create (name, product ids, column mapping, rows as JSON with line numbers, so the
   browser parses the file and the later public API can post the same body), detail with counts,
-  `cancel`, `retry-failed` (re-queues only failed checks), sites with results (paged, filter by
+  `cancel`, `pause` and `resume` (a running run stops starting calls, then carries on),
+  `retry-failed` (re-queues only failed checks), `rerun` (checks a finished run's sites
+  again, replacing its results), sites with results (paged, filter by
   status, or `?ids=` for the sites a live event named), `export` (CSV; for a run still going, the
   lines finished so far, the rest marked "Pending").
 
@@ -224,8 +226,8 @@ longitude −180..180.
 - **Feasibilities** (`/feasibilities`): runs with status and progress. **New run:** upload a CSV
   or XLSX, map name, latitude and longitude (optionally bandwidth), see the rows that will be
   left out and why, pick products grouped by provider and filterable by type, start. **A run:**
-  live progress, a table of sites with a status per product, errors per site, Cancel, Retry
-  failed, Export.
+  live progress, a table of sites with a status per product, errors per site, Pause and
+  Continue, Cancel, Retry failed, Run again (asks first, in a dialog), Export.
 - The export keeps the uploaded columns in order, then a column per picked product ("Available",
   "Near-net", "Coverage only", "Not available", "Error"), then an "Errors" column.
 
@@ -237,7 +239,7 @@ New permission codes in `access_control.py`:
 | `integrations.view` | See connectors, connections (never secrets) and products | ✓ | ✓ | |
 | `integrations.manage` | Connect, edit, test, sync and remove connections | ✓ | | |
 | `feasibilities.view` | See runs, results and export | ✓ | ✓ | ✓ |
-| `feasibilities.run` | Start, cancel and retry runs | ✓ | ✓ | |
+| `feasibilities.run` | Start, pause, continue, cancel, retry and run again | ✓ | ✓ | |
 
 Starting a run needs `feasibilities.run` only; the product picker lists the company's products
 without needing `integrations.view`.
@@ -372,7 +374,7 @@ without needing `integrations.view`.
 ### AT-0003-19 — Results don't change after a run
 - Given a completed run
 - When a later run checks the same sites, or a product is retired
-- Then the first run's results are unchanged
+- Then the first run's results are unchanged (only running that run again replaces them, 28)
 
 ### AT-0003-20 — Refused credentials don't keep retrying
 - Given a connection's credentials stop working mid-run
@@ -384,6 +386,39 @@ without needing `integrations.view`.
   retry one
 - And someone with neither feasibility permission sees no Feasibilities section and gets 403
   from its API
+
+### AT-0003-28 — I run a run again
+- Given a completed or cancelled run
+- When I choose Run again and confirm
+- Then all its sites are checked again against the products it picked that are still offered,
+  and its old checks and results are replaced by the new ones (the run keeps its id, name and
+  sites)
+- And a run still going, one with a provider call still finishing after a cancel, or one whose
+  products are all retired can't be run again
+
+### AT-0003-29 — I rename a run
+- Given a run, whether it is still going or finished
+- When I rename it
+- Then the new name shows on the run, in the list and in open tabs, and the export is named after
+  it; nothing else about the run changes
+- And a name can't be blank or longer than 100 characters, and a Viewer can't rename a run
+
+### AT-0003-30 — I pause a run and continue it
+- Given a running run
+- When I pause it
+- Then it shows "Paused", no new provider calls start for it (calls under way finish), and my
+  company's other runs carry on
+- When I choose Continue
+- Then its remaining sites are checked, after the other runs my company has going, and it
+  completes
+- And a paused run can be cancelled but not run again, and a Viewer can't pause or continue one
+
+### AT-0003-31 — Companies take turns on a shared account
+- Given several companies run feasibilities at once on one provider account (such as one of
+  Telejects' accounts)
+- Then they take turns within that account's limits, so each sees progress; a busy company
+  slows the others down but never holds them up
+- And within one company, runs go in the order they started (pause one to let another go first)
 
 ### Connectors
 
@@ -514,9 +549,28 @@ Built as approved, with decisions 6–12 as drafted and 13 as decided.
     real Postgres `LISTEN`/`NOTIFY`.
   - Provider APIs are faked with respx (`conftest.py`), with invented data. Hatchet runs inline
     through the `worker` fixture.
+- **Run again (AT-0003-28, added 2026-11-20 at Ruan's request):** `services.rerun` deletes
+  the run's checks (results cascade), keeps only its still-current products, resets the counts
+  and queues it for planning like a new run. Request logs keep the old calls; they name the
+  run, so the run's Requests link shows every pass. Tests in `test_feasibilities.py` (28) and
+  added to 21 and 25.
+- **Rename (AT-0003-29, added 2026-11-21 at Ruan's request):** `PATCH
+  /api/feasibilities/runs/<id>/` with `{"name"}` (`feasibilities.run`), through
+  `services.rename_run`, which updates only the name (a run still going isn't raced) and
+  publishes to the list and the run. The run page has a pencil by the name. Tests in
+  `test_feasibilities.py` (29) and added to 21 and 25.
+- **Pause and continue (AT-0003-30, added 2026-11-21 at Ruan's request):** a new `paused`
+  status (counts as still going). `services.pause_run` leaves the checks pending; queued check
+  tasks that reach a worker skip. `resume_run` queues the pending checks again, so they go
+  behind the company's other runs. Tests in `test_feasibilities.py` (30) and added to 21 and 25.
+- **Taking turns (AT-0003-31, added 2026-11-21):** `feasibility-check` has a second
+  round-robin concurrency key, `limit_key:realm_id`, under the account's own key. Test 31
+  checks the configuration; the scheduling itself is Hatchet's.
+- **Dropping queued tasks:** each check task carries `feasibility_run: <realm>:<run>`
+  metadata. Pausing and cancelling start `feasibility-drop-queued`, which cancels that run's
+  tasks still queued in Hatchet from before that moment. Otherwise each would still take a turn
+  and a unit of the account's rate limit from everyone on it.
 - **Deviations:**
-  - Cancelling marks pending checks cancelled, and their queued Hatchet tasks then do nothing,
-    instead of being cancelled in Hatchet.
   - The planning task makes the checks, not the request, so starting a 10,000-row run returns
     quickly.
   - `ProviderCheck.connection` and `FeasibilityResult.product` are `RESTRICT`, not `PROTECT`:

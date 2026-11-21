@@ -89,15 +89,38 @@ export function useStartRun() {
   });
 }
 
+type RunAction = "cancel" | "pause" | "resume" | "retry-failed" | "rerun";
+
+const ACTION_DONE: Record<RunAction, string> = {
+  cancel: "Run cancelled",
+  pause: "Run paused. Calls already under way will finish.",
+  resume: "Carrying on…",
+  "retry-failed": "Retrying what failed…",
+  rerun: "Running it again…",
+};
+
 export function useRunAction(id: number) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (action: "cancel" | "retry-failed") =>
-      api<Run>(`${runPath(id)}${action}/`, { method: "POST" }),
+    mutationFn: (action: RunAction) => api<Run>(`${runPath(id)}${action}/`, { method: "POST" }),
     onSuccess: (run, action) => {
-      toast.success(action === "cancel" ? "Run cancelled" : "Retrying what failed…");
+      toast.success(ACTION_DONE[action]);
       client.setQueryData([...ROOT, "run", id], run);
       void client.invalidateQueries({ queryKey: [...ROOT, "run", id, "sites"] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
+export function useRenameRun(id: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api<Run>(runPath(id), { method: "PATCH", body: JSON.stringify({ name }) }),
+    onSuccess: (run) => {
+      toast.success("Run renamed");
+      client.setQueryData([...ROOT, "run", id], run);
+      void client.invalidateQueries({ queryKey: [...ROOT, "runs"], exact: true });
     },
     onError: (error) => toast.error(error.message),
   });

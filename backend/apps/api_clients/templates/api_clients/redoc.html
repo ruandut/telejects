@@ -1,0 +1,7 @@
+{% extends "drf_spectacular/redoc.html" %}
+{% block head %}
+{{ block.super }}
+{# Redoc has no dark theme: keep the page light whatever the reader's setting. #}
+<meta name="color-scheme" content="light">
+<style>body { background: #fff; }</style>
+{% endblock head %}

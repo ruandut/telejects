@@ -8,13 +8,17 @@ export type Permission =
   | "feasibilities.view"
   | "feasibilities.run"
   | "feasibilities.quote"
-  | "api_clients.manage";
+  | "api_clients.manage"
+  | "projects.view"
+  | "projects.manage";
 
 export type RoleRef = { id: number; key: string; name: string };
 
 export type RealmRef = { id: number; name: string };
 
 export type CurrentRealm = RealmRef & {
+  /** My membership's id in this company: how boards name me. */
+  membership: number;
   role: RoleRef;
   /** What I may do in this company. The app shows and hides things by these. */
   permissions: Permission[];

@@ -59,7 +59,7 @@ function ClientForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>New API client</DialogTitle>
+        <DialogTitle>New server credentials</DialogTitle>
         <DialogDescription>
           For a system that talks to Telejects directly. It can only do what you give it, and only
           what you may do yourself.

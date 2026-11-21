@@ -93,6 +93,8 @@ class Worker:
     def __init__(self):
         self.held = False
         self.planned: list[int] = []
+        # (realm_id, run_id) of each run whose queued Hatchet tasks were dropped.
+        self.dropped: list[tuple[int, int]] = []
 
     def hold(self):
         self.held = True
@@ -126,6 +128,11 @@ def worker(monkeypatch, settings):
     monkeypatch.setattr(feasibilities, "_after_commit", lambda func: func())
     monkeypatch.setattr(feasibilities, "_enqueue_plan", inline.plan)
     monkeypatch.setattr(feasibilities, "_enqueue_checks", inline.checks)
+    monkeypatch.setattr(
+        feasibilities,
+        "_enqueue_drop",
+        lambda realm_id, run_id, since, until: inline.dropped.append((realm_id, run_id)),
+    )
     monkeypatch.setattr(feasibilities, "_sleep", lambda seconds: None)
     monkeypatch.setattr(demo, "DELAY_SECONDS", 0)
     # One-site checks (0006): each provider call runs inline as it is enqueued.

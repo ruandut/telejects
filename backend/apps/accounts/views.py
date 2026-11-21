@@ -52,6 +52,8 @@ def _current(membership) -> dict:
     return {
         "id": membership.realm_id,
         "name": membership.realm.name,
+        # My membership's id there: how boards name me (people columns, presence).
+        "membership": membership.id,
         "role": {"id": role.id, "key": role.key, "name": role.name},
         "permissions": sorted(code for code in PERMISSIONS if membership.has_perm(code)),
     }

@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "drf_spectacular",
     "channels",
     "oauth2_provider",
     # Platform apps: shared plumbing, no product features. Allowed imports between apps are
@@ -48,6 +49,13 @@ INSTALLED_APPS = [
     "apps.api_clients",
     "apps.site_checks",
     "apps.pricebook",
+    # Projects, boards and their automations and insights (0007).
+    "apps.projects",
+    "apps.notifications",
+    "apps.boards",
+    "apps.automations",
+    "apps.presence",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
@@ -127,6 +135,49 @@ REST_FRAMEWORK = {
         "oauth": "30/min",
     },
     "COERCE_DECIMAL_TO_STRING": False,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# The public API docs (/api/docs/): only what an API client can call (apps/api_clients/openapi.py).
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Telejects API",
+    "DESCRIPTION": (
+        "For systems that check feasibility and get quotes from Telejects directly.\n\n"
+        "1. Create server credentials in Telejects under **Developers**. Each set has a client ID "
+        "and a secret (shown once) and works in its company only, with the permissions it was "
+        "given.\n"
+        "2. Ask for a token: `POST /api/oauth/token/` with "
+        "`grant_type=client_credentials`, the client ID and the secret. It lasts an hour.\n"
+        "3. Send it with each request as `Authorization: Bearer <token>`.\n\n"
+        "The feasibility, quote and product endpoints keep Rapid's paths, request bodies and "
+        "responses, so a system moving from Rapid only changes its host and credentials."
+    ),
+    "VERSION": "1",
+    "OAS_VERSION": "3.1.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    "SERVE_AUTHENTICATION": [],
+    "PREPROCESSING_HOOKS": ["apps.api_clients.openapi.client_endpoints_only"],
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": r"/api/",
+    "SORT_OPERATIONS": False,
+    # Pinned: Redoc's latest no longer ships the standalone script the docs page loads.
+    "REDOC_DIST": "https://cdn.jsdelivr.net/npm/redoc@2.5.0",
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "clientCredentials": {
+                "type": "oauth2",
+                "description": "An API client's ID and secret, from Developers → Server "
+                "credentials, exchanged for a bearer token that lasts an hour.",
+                "flows": {
+                    "clientCredentials": {
+                        "tokenUrl": "/api/oauth/token/",
+                        "scopes": {"api": "Use the Telejects API as this client"},
+                    }
+                },
+            }
+        }
+    },
 }
 
 SIMPLE_JWT = {

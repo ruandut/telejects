@@ -31,6 +31,22 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
         "api_clients",
         "site_checks",
     },
+    # Projects and their boards (0007). Boards never import automations: they send signals.
+    "projects": {"core", "accounts", "realms"},
+    "notifications": {"core", "realms"},
+    # A board can be made from a feasibility run's sites (0007).
+    "boards": {
+        "core",
+        "accounts",
+        "realms",
+        "projects",
+        "notifications",
+        "feasibilities",
+        "integrations",
+    },
+    "automations": {"core", "accounts", "realms", "jobs", "projects", "boards", "notifications"},
+    "presence": {"core", "realms", "jobs", "projects", "boards"},
+    "analytics": {"core", "realms", "projects", "boards"},
 }
 
 

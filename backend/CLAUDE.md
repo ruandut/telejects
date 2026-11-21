@@ -12,6 +12,9 @@ Django + DRF + SimpleJWT over ASGI (Daphne), uv for tooling. The root CLAUDE.md 
   that mutates models); `serializers.py`; thin `views.py`; `urls.py`; `tasks.py`; `admin.py`;
   tests next to the code as `test_*.py`. Other apps call an app's models, managers and services,
   not its views.
+- When a lower app must tell a higher one something happened, it sends a Django signal from its
+  own `signals.py` and the higher app connects in `AppConfig.ready` (`boards` → `automations`,
+  `projects` → `boards`), so the import graph stays downward.
 - Light coupling is fine where it makes sense (a queryset naming another app's relation), as long
   as the allowed imports hold. Raise any change to the import graph first.
 
@@ -51,6 +54,8 @@ Django + DRF + SimpleJWT over ASGI (Daphne), uv for tooling. The root CLAUDE.md 
   owning app's scoped queryset and the same serializer as the API endpoint, for each subscriber,
   so the socket and the API always agree on who sees what and what it looks like.
 - Coalesce events (about one a second per subscription) so large jobs don't flood the socket.
+- Publish with `items=[...]` (even `[]`) when the topic's `render` should send data; without
+  items the socket only says "changed" and the tab refetches.
 
 ## Tests
 

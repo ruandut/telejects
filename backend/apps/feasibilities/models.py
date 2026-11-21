@@ -24,6 +24,7 @@ class FeasibilityRun(TenantModel):
     class Status(models.TextChoices):
         QUEUED = "queued", "Queued"
         RUNNING = "running", "Running"
+        PAUSED = "paused", "Paused"
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -58,7 +59,8 @@ class FeasibilityRun(TenantModel):
 
     @property
     def is_going(self) -> bool:
-        return self.status in (self.Status.QUEUED, self.Status.RUNNING)
+        """Not finished yet: queued, running or paused."""
+        return self.status in (self.Status.QUEUED, self.Status.RUNNING, self.Status.PAUSED)
 
 
 class RunSite(TenantModel):

@@ -130,7 +130,10 @@ def test_at_0001_07_some_roles_dont_see_users_at_all(realm):
     client = client_for(someone.user, realm)
     assert client.get("/api/users/").status_code == 403
     assert client.get("/api/roles/").status_code == 403
-    assert client.get("/api/auth/me/").json()["realm"]["permissions"] == ["feasibilities.view"]
+    assert client.get("/api/auth/me/").json()["realm"]["permissions"] == [
+        "feasibilities.view",
+        "projects.view",
+    ]
 
 
 def test_at_0001_08_an_admin_cancels_an_invitation(api, realm):
@@ -216,6 +219,8 @@ def test_at_0001_15_i_pick_a_role_when_adding_someone(api, realm):
         "feasibilities.view",
         "feasibilities.run",
         "feasibilities.quote",
+        "projects.view",
+        "projects.manage",
     ]
 
     res = api.post("/api/users/", {"email": "x@example.com", "name": "No Role"}, format="json")
@@ -254,6 +259,8 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
         "integrations.logs",
         "integrations.manage",
         "integrations.view",
+        "projects.manage",
+        "projects.view",
         "users.manage",
         "users.view",
     ]
@@ -265,6 +272,8 @@ def test_at_0001_18_my_permissions_come_with_who_i_am(user, realm):
         "feasibilities.view",
         "integrations.logs",
         "integrations.view",
+        "projects.manage",
+        "projects.view",
         "users.view",
     ]
 

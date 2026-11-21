@@ -4,6 +4,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Pause,
+  Pencil,
+  Play,
+  RefreshCw,
   RotateCcw,
   ScrollText,
   Square,
@@ -11,13 +15,16 @@ import {
 import { useState } from "react";
 
 import { NativeSelect } from "@/components/form";
+import { NameDialog } from "@/components/name-dialog";
 import { NoAccess } from "@/components/no-access";
 import { SearchInput } from "@/components/search-input";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/features/auth/api";
 import {
   useExportRun,
+  useRenameRun,
   useRun,
   useRunAction,
   useRunLive,
@@ -79,20 +86,44 @@ function Loaded({ run }: { run: Run }) {
   const seesLogs = usePermission("integrations.logs");
   const action = useRunAction(run.id);
   const exportRun = useExportRun(run.id);
+  const rename = useRenameRun(run.id);
+  const [renaming, setRenaming] = useState(false);
   const [state, setState] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = useFeasibilityFilters((s) => s.pageSize);
   const setPageSize = useFeasibilityFilters((s) => s.setPageSize);
   const sites = useRunSites(run.id, { page, pageSize, state, search: search.trim() });
-  const going = run.status === "queued" || run.status === "running";
+  const going = run.status === "queued" || run.status === "running" || run.status === "paused";
 
   return (
     <>
+      {renaming && (
+        <NameDialog
+          title="Rename run"
+          initial={run.name}
+          maxLength={100}
+          pending={rename.isPending}
+          onSubmit={(name) => rename.mutate(name, { onSuccess: () => setRenaming(false) })}
+          onClose={() => setRenaming(false)}
+        />
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold tracking-tight">{run.name}</h1>
+            {canRun && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground"
+                aria-label="Rename run"
+                title="Rename"
+                onClick={() => setRenaming(true)}
+              >
+                <Pencil />
+              </Button>
+            )}
             <RunStatusBadge status={run.status} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -101,6 +132,20 @@ function Loaded({ run }: { run: Run }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canRun && run.status === "running" && (
+            <Button
+              variant="outline"
+              disabled={action.isPending}
+              onClick={() => action.mutate("pause")}
+            >
+              <Pause /> Pause
+            </Button>
+          )}
+          {canRun && run.status === "paused" && (
+            <Button disabled={action.isPending} onClick={() => action.mutate("resume")}>
+              <Play /> Continue
+            </Button>
+          )}
           {canRun && going && (
             <Button
               variant="outline"
@@ -118,6 +163,23 @@ function Loaded({ run }: { run: Run }) {
             >
               <RotateCcw /> Retry failed
             </Button>
+          )}
+          {canRun && !going && (
+            <ConfirmDialog
+              title={`Run "${run.name}" again?`}
+              description={`All ${run.site_count.toLocaleString("en-ZA")} sites are checked again, and the new results replace the ones this run has now.`}
+              cancelLabel="Keep these results"
+              confirmLabel={
+                <>
+                  <RefreshCw /> Run again
+                </>
+              }
+              onConfirm={() => action.mutate("rerun")}
+            >
+              <Button variant="outline" disabled={action.isPending}>
+                <RefreshCw /> Run again
+              </Button>
+            </ConfirmDialog>
           )}
           {seesLogs && (
             <Button variant="outline" asChild>

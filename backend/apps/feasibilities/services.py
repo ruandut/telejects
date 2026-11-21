@@ -54,6 +54,18 @@ def _enqueue_checks(realm_id: int, run_id: int, check_ids: list[int]) -> None:
     enqueue_checks(realm_id, run_id, check_ids)
 
 
+def _enqueue_drop(realm_id: int, run_id: int, since, until) -> None:
+    from .tasks import enqueue_drop
+
+    enqueue_drop(realm_id, run_id, since, until)
+
+
+def _drop_queued(run: FeasibilityRun) -> None:
+    """Once committed, take the run's waiting check tasks out of Hatchet's queue."""
+    realm_id, run_id, since, until = run.realm_id, run.id, run.created_at, timezone.now()
+    _after_commit(lambda: _enqueue_drop(realm_id, run_id, since, until))
+
+
 def _publish(run: FeasibilityRun, site_ids=()) -> None:
     events.publish(run.realm_id, RUNS_TOPIC)
     events.publish(run.realm_id, RUN_TOPIC, subject=run.id, items=list(site_ids))
@@ -411,6 +423,18 @@ def _complete_if_finished(run_id: int, realm_id: int) -> None:
         _publish(run)
 
 
+# --- renaming -------------------------------------------------------------------------------
+
+
+def rename_run(run: FeasibilityRun, name: str) -> FeasibilityRun:
+    """Only the name changes, whatever state the run is in: an update of that one column, so a
+    run still going doesn't race its own counts."""
+    FeasibilityRun.objects.in_realm(run.realm_id).filter(pk=run.pk).update(name=name)
+    run.name = name
+    _publish(run)
+    return run
+
+
 # --- cancelling and retrying ------------------------------------------------------------------
 
 
@@ -434,6 +458,45 @@ def cancel_run(run: FeasibilityRun) -> FeasibilityRun:
     run.save()
     run.refresh_from_db()
     _publish(run, site_ids)
+    _drop_queued(run)
+    return run
+
+
+@transaction.atomic
+def pause_run(run: FeasibilityRun) -> FeasibilityRun:
+    """Stop starting new provider calls for a run; calls under way finish. Its checks stay
+    pending, and their queued tasks leave Hatchet, so other runs go first."""
+    run = FeasibilityRun.objects.in_realm(run.realm_id).select_for_update().get(pk=run.pk)
+    if run.status != RunStatus.RUNNING:
+        raise ValidationError({"detail": "Only a running run can be paused."})
+    run.status = RunStatus.PAUSED
+    run.save(update_fields=["status"])
+    _publish(run)
+    _drop_queued(run)
+    return run
+
+
+@transaction.atomic
+def resume_run(run: FeasibilityRun) -> FeasibilityRun:
+    """Carry on with a paused run: its pending checks are queued again, behind the company's
+    other runs that are going."""
+    run = FeasibilityRun.objects.in_realm(run.realm_id).select_for_update().get(pk=run.pk)
+    if run.status != RunStatus.PAUSED:
+        raise ValidationError({"detail": "Only a paused run can be continued."})
+    run.status = RunStatus.RUNNING
+    run.save(update_fields=["status"])
+    ids = list(
+        ProviderCheck.objects.in_realm(run.realm_id)
+        .of_run(run)
+        .filter(status=CheckStatus.PENDING)
+        .values_list("id", flat=True)
+    )
+    _publish(run)
+    # Calls that were under way may have finished everything while it was paused.
+    _complete_if_finished(run.id, run.realm_id)
+    run.refresh_from_db()
+    realm_id, run_id = run.realm_id, run.id
+    _after_commit(lambda: _enqueue_checks(realm_id, run_id, ids))
     return run
 
 
@@ -464,4 +527,41 @@ def retry_failed(run: FeasibilityRun) -> FeasibilityRun:
     _publish(run, set(site_ids))
     realm_id, run_id = run.realm_id, run.id
     _after_commit(lambda: _enqueue_checks(realm_id, run_id, ids))
+    return run
+
+
+@transaction.atomic
+def rerun(run: FeasibilityRun) -> FeasibilityRun:
+    """Check a finished (or cancelled) run's sites again, in place: its checks and results are
+    replaced by new ones, against the products it picked that are still offered."""
+    run = FeasibilityRun.objects.in_realm(run.realm_id).select_for_update().get(pk=run.pk)
+    if run.is_going:
+        raise ValidationError({"detail": "A run can be run again once it has finished."})
+    checks = ProviderCheck.objects.in_realm(run.realm_id).of_run(run)
+    # Cancelling leaves a call already under way to finish; it would write into the new run.
+    if checks.filter(status=CheckStatus.RUNNING).exists():
+        raise ValidationError(
+            {"detail": "A provider call from this run is still finishing. Try again shortly."}
+        )
+    products = list(
+        ProviderProduct.objects.in_realm(run.realm_id)
+        .current()
+        .filter(id__in=run.products.values("id"))
+    )
+    if not products:
+        raise ValidationError(
+            {"detail": "None of this run's products are offered any more. Start a new run."}
+        )
+    # Results go with their checks (CASCADE). Request logs keep the old calls, by id.
+    checks.delete()
+    run.products.set(products)
+    run.status = RunStatus.QUEUED
+    run.started_at = None
+    run.finished_at = None
+    run.checks_total = run.checks_done = run.checks_failed = run.checks_cancelled = 0
+    run.save()
+    site_ids = RunSite.objects.in_realm(run.realm_id).of_run(run).values_list("id", flat=True)
+    _publish(run, list(site_ids))
+    realm_id, run_id = run.realm_id, run.id
+    _after_commit(lambda: _enqueue_plan(realm_id, run_id))
     return run

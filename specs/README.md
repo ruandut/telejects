@@ -28,3 +28,4 @@ new endpoint has its company-isolation tests, and `make test` and `make check` p
 | [0004](0004-platform-provider-accounts.md) | Telejects' provider accounts, shared with chosen companies | Done |
 | [0005](0005-integration-request-logs.md) | Integration request logs | Done |
 | [0006](0006-price-book-and-quotes.md) | Telejects' price book and single-site quotes over the API | Done |
+| [0007](0007-projects-boards-automations.md) | Projects, boards, automations and insights | Done |

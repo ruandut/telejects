@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, Pause } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ export function StateBadge({ state }: { state: "pending" | "error" | "cancelled"
 const RUN_LABEL: Record<RunStatus, string> = {
   queued: "Queued",
   running: "Running",
+  paused: "Paused",
   completed: "Completed",
   cancelled: "Cancelled",
 };
@@ -46,6 +47,7 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
   return (
     <Badge variant={status === "completed" ? "secondary" : "outline"}>
       {(status === "running" || status === "queued") && <Loader2 className="size-3 animate-spin" />}
+      {status === "paused" && <Pause className="size-3" />}
       {RUN_LABEL[status]}
     </Badge>
   );

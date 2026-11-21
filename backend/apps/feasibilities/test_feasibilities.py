@@ -6,11 +6,13 @@ import json
 from decimal import Decimal
 
 import pytest
+from django.utils import timezone
 
 from apps.feasibilities import services
 from apps.feasibilities.models import FeasibilityResult, FeasibilityRun, ProviderCheck
 from apps.integrations.connectors import demo
 from apps.integrations.models import Connection, ProviderProduct
+from apps.realms import events
 from apps.realms.models import RealmMembership, Role
 from conftest import client_for, connect, member, rows, start_run
 
@@ -113,7 +115,6 @@ def test_a_queued_runs_sites_are_pending(api, mtn_and_vodacom, monkeypatch):
 def test_at_0003_11_i_see_each_lines_results_as_it_finishes(
     api, realm, mtn_and_vodacom, worker, monkeypatch
 ):
-    from apps.realms import events
 
     published = []
     monkeypatch.setattr(events, "publish", lambda *a, **k: published.append((a, k)))
@@ -178,6 +179,93 @@ def test_at_0003_15_i_retry_only_what_failed(api, realm, mtn_and_vodacom, provid
     assert api.post(f"/api/feasibilities/runs/{run['id']}/retry-failed/").status_code == 400
 
 
+def test_at_0003_28_i_run_a_run_again(api, realm, mtn_and_vodacom, providers):
+    providers.mtn.not_feasible.add("-33.9")
+    providers.vodacom.down.add("-33.9")
+    chosen = picks(mtn_and_vodacom, "Business Fibre 100", "Business Fibre")
+    run = start_run(api, chosen, rows(*SITES)).json()
+    assert run_of(api, run["id"])["checks_failed"] > 0
+    first = {r.id for r in FeasibilityResult.objects.in_realm(realm)}
+    old_checks = set(ProviderCheck.objects.in_realm(realm).values_list("id", flat=True))
+    assert first
+
+    # The providers now answer differently, and checking again overwrites the old answers.
+    providers.mtn.not_feasible.clear()
+    providers.vodacom.down.clear()
+    providers.mtn.feasibility_calls.clear()
+    providers.vodacom.feasibility_calls.clear()
+    res = api.post(f"/api/feasibilities/runs/{run['id']}/rerun/")
+    assert res.status_code == 200
+    again = run_of(api, run["id"])
+    assert again["status"] == "completed"
+    assert (again["checks_failed"], again["checks_done"]) == (0, again["checks_total"])
+    assert len(providers.vodacom.feasibility_calls) == 3
+    assert FeasibilityRun.objects.in_realm(realm).count() == 1
+    assert not first & {r.id for r in FeasibilityResult.objects.in_realm(realm)}
+    assert not old_checks & set(ProviderCheck.objects.in_realm(realm).values_list("id", flat=True))
+    store2 = next(s for s in sites_of(api, run["id"]) if s["name"] == "Store 2")
+    assert store2["state"] == "done" and store2["errors"] == []
+    assert {r["product"] for r in store2["results"]} == set(chosen)
+
+
+def test_at_0003_29_i_rename_a_run(api, realm, mtn_and_vodacom, worker, monkeypatch):
+    published = []
+    monkeypatch.setattr(events, "publish", lambda *a, **k: published.append((a, k)))
+    worker.hold()
+    chosen = picks(mtn_and_vodacom, "Business Fibre 100", "Business Fibre")
+    run = start_run(api, chosen, rows(*SITES)).json()
+    path = f"/api/feasibilities/runs/{run['id']}/"
+
+    # Renamed while still going: only the name changes.
+    res = api.patch(path, {"name": "  Cape Town stores  "}, format="json")
+    assert res.status_code == 200
+    assert res.json()["name"] == "Cape Town stores"
+    assert res.json()["status"] == run["status"]
+    listed = api.get("/api/feasibilities/runs/").json()
+    assert [(r["id"], r["name"]) for r in listed] == [(run["id"], "Cape Town stores")]
+    # Open tabs, the list and the run page, are told.
+    assert {a[1] for a, _ in published} >= {"feasibility_runs", "feasibility_run"}
+
+    # And once it has finished.
+    for check_id in worker.planned:
+        services.perform_check(realm.id, check_id)
+    assert run_of(api, run["id"])["status"] == "completed"
+    assert api.patch(path, {"name": "Stores"}, format="json").json()["name"] == "Stores"
+    assert api.get(f"{path}export/")["Content-Disposition"].endswith('filename="Stores.csv"')
+
+    # A name is required and short, and nothing else can be changed.
+    assert api.patch(path, {"name": "   "}, format="json").status_code == 400
+    assert api.patch(path, {"name": "x" * 101}, format="json").status_code == 400
+    api.patch(path, {"name": "Stores", "status": "cancelled"}, format="json")
+    assert run_of(api, run["id"])["status"] == "completed"
+    assert api.put(path, {"name": "Stores"}, format="json").status_code == 405
+
+
+def test_at_0003_28_only_a_finished_run_runs_again(api, realm, mtn_and_vodacom, worker, providers):
+    worker.hold()
+    chosen = picks(mtn_and_vodacom, "Business Fibre 100", "Business Fibre")
+    run = start_run(api, chosen, rows(*SITES)).json()
+    path = f"/api/feasibilities/runs/{run['id']}/rerun/"
+    assert api.post(path).status_code == 400  # still going
+
+    # Cancelled with a call still under way: that call must finish first.
+    check = ProviderCheck.objects.in_realm(realm).get(pk=worker.planned[0])
+    ProviderCheck.objects.in_realm(realm).filter(pk=check.pk).update(status="running")
+    api.post(f"/api/feasibilities/runs/{run['id']}/cancel/")
+    assert api.post(path).status_code == 400
+    ProviderCheck.objects.in_realm(realm).filter(pk=check.pk).update(status="done")
+
+    # A retired product is left out; with none left there's nothing to run.
+    mtn = mtn_and_vodacom["Business Fibre 100"]
+    ProviderProduct.objects.in_realm(realm).filter(pk=mtn.pk).update(retired_at=timezone.now())
+    worker.held = False
+    assert api.post(path).status_code == 200
+    assert [p["id"] for p in run_of(api, run["id"])["products"]] == [chosen[1]]
+    assert len(providers.mtn.feasibility_calls) == 0
+    ProviderProduct.objects.in_realm(realm).update(retired_at=timezone.now())
+    assert api.post(path).status_code == 400
+
+
 def test_at_0003_16_i_cancel_a_run(api, realm, mtn_and_vodacom, worker, providers):
     worker.hold()
     run = start_run(api, picks(mtn_and_vodacom, "Business Fibre"), rows(*SITES)).json()
@@ -191,6 +279,8 @@ def test_at_0003_16_i_cancel_a_run(api, realm, mtn_and_vodacom, worker, provider
     states = [s["state"] for s in sites_of(api, run["id"])]
     assert states == ["done", "cancelled", "cancelled"]
     assert api.post(f"/api/feasibilities/runs/{run['id']}/cancel/").status_code == 400
+    # Its waiting tasks are taken out of Hatchet's queue too.
+    assert worker.dropped == [(realm.id, run["id"])]
 
 
 def test_at_0003_17_the_export_keeps_my_spreadsheet(api, mtn_and_vodacom, providers):
@@ -260,11 +350,8 @@ def test_at_0003_18_hatchet_limits_each_connection():
     from apps.feasibilities.tasks import feasibility_check
 
     task = feasibility_check._task
-    (concurrency,) = task.concurrency
-    assert (concurrency.expression, concurrency.max_runs) == (
-        "input.limit_key",
-        "input.max_concurrency",
-    )
+    account = task.concurrency[0]
+    assert (account.expression, account.max_runs) == ("input.limit_key", "input.max_concurrency")
     (rate,) = task.rate_limits
     assert rate.key_expr == "input.limit_key"
     assert rate.limit_values_expr == "input.requests_per_minute"
@@ -315,9 +402,14 @@ def test_at_0003_21_who_can_run_and_see_feasibilities(api, realm, mtn_and_vodaco
         start_run(viewer, picks(mtn_and_vodacom, "Business LTE"), rows(*SITES)),
         viewer.post(f"{path}cancel/"),
         viewer.post(f"{path}retry-failed/"),
+        viewer.post(f"{path}rerun/"),
+        viewer.post(f"{path}pause/"),
+        viewer.post(f"{path}resume/"),
+        viewer.patch(path, {"name": "Viewer's name"}, format="json"),
         viewer.get("/api/feasibilities/runs/products/"),
     ]
-    assert [r.status_code for r in attempts] == [403] * 4
+    assert [r.status_code for r in attempts] == [403] * 8
+    assert viewer.get(path).json()["name"] == run["name"]
 
     nobody_role = Role.objects.create(realm=realm, key="outside", name="Outside", permissions=[])
     outsider = member(realm, "outside@example.com", "viewer")
@@ -432,3 +524,54 @@ def test_run_sites_pages_follow_the_search_and_filter(api, realm):
         states[state] = page["count"]
         assert {s["state"] for s in page["results"]} <= {state}
     assert states["done"] + states["error"] == 45
+
+
+def test_at_0003_30_i_pause_and_continue_a_run(api, realm, mtn_and_vodacom, worker, providers):
+    worker.hold()
+    run = start_run(api, picks(mtn_and_vodacom, "Business Fibre"), rows(*SITES)).json()
+    path = f"/api/feasibilities/runs/{run['id']}/"
+    services.perform_check(realm.id, worker.planned[0])
+    assert api.post(f"{path}resume/").status_code == 400  # not paused
+
+    res = api.post(f"{path}pause/")
+    assert res.status_code == 200 and res.json()["status"] == "paused"
+    assert worker.dropped == [(realm.id, run["id"])]
+    assert api.post(f"{path}pause/").status_code == 400
+    calls = len(providers.vodacom.feasibility_calls)
+    # A task already handed out does nothing, and its check waits.
+    assert services.perform_check(realm.id, worker.planned[1]) == "skipped"
+    assert len(providers.vodacom.feasibility_calls) == calls
+    checks = ProviderCheck.objects.in_realm(realm).of_run(run["id"])
+    assert checks.filter(status="pending").count() == 2
+    assert api.post(f"{path}rerun/").status_code == 400
+
+    worker.held = False
+    assert api.post(f"{path}resume/").status_code == 200
+    assert run_of(api, run["id"])["status"] == "completed"
+    assert len(providers.vodacom.feasibility_calls) == calls + 2
+    assert all(s["state"] == "done" for s in sites_of(api, run["id"]))
+
+
+def test_at_0003_30_a_paused_run_can_be_cancelled(api, realm, mtn_and_vodacom, worker):
+    worker.hold()
+    run = start_run(api, picks(mtn_and_vodacom, "Business Fibre"), rows(*SITES)).json()
+    path = f"/api/feasibilities/runs/{run['id']}/"
+    api.post(f"{path}pause/")
+    res = api.post(f"{path}cancel/")
+    assert res.status_code == 200 and res.json()["status"] == "cancelled"
+    assert res.json()["checks_cancelled"] == 3
+    assert api.post(f"{path}resume/").status_code == 400
+
+
+def test_at_0003_31_companies_take_turns_on_one_account():
+    from apps.feasibilities.tasks import FAIR_KEY, feasibility_check
+
+    # Per account and company, round robin: Hatchet takes turns between companies within the
+    # account's limit, and a company's own runs go in order.
+    fair = feasibility_check._task.concurrency[1]
+    assert FAIR_KEY == 'input.limit_key + ":" + string(input.realm_id)'
+    assert (fair.expression, fair.max_runs, fair.limit_strategy) == (
+        FAIR_KEY,
+        "input.max_concurrency",
+        "GROUP_ROUND_ROBIN",
+    )

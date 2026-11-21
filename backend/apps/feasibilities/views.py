@@ -1,7 +1,7 @@
 """Feasibility runs. Everything is inside the request's company: runs, sites and results are
 looked up through `in_realm(request.realm)`, so another company's run is a 404, and the products
 a run may use are narrowed to the company's own. Seeing needs `feasibilities.view`; starting,
-cancelling and retrying need `feasibilities.run`."""
+renaming, pausing, continuing, cancelling, retrying and running again need `feasibilities.run`."""
 
 import csv
 import io
@@ -20,6 +20,7 @@ from . import services
 from .models import FeasibilityRun, RunSite
 from .pagination import SitePagination
 from .serializers import (
+    RenameRunSerializer,
     RunListSerializer,
     RunProductSerializer,
     RunSerializer,
@@ -41,6 +42,7 @@ class RunViewSet(
     queryset = FeasibilityRun.objects.listed()
     serializer_class = RunSerializer
     lookup_value_regex = r"\d+"
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_serializer_class(self):
         return RunListSerializer if self.action == "list" else RunSerializer
@@ -66,6 +68,13 @@ class RunViewSet(
             RunSerializer(fresh, context=self.get_serializer_context()).data, status=201
         )
 
+    def partial_update(self, request, pk=None):
+        """Renames a run; its name is the only thing that can be changed."""
+        run = self.get_object()
+        serializer = RenameRunSerializer(data=request.data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        return self._fresh(services.rename_run(run, serializer.validated_data["name"]))
+
     def _fresh(self, run):
         return Response(
             RunSerializer(
@@ -80,6 +89,18 @@ class RunViewSet(
     @action(detail=True, methods=["post"], url_path="retry-failed")
     def retry_failed(self, request, pk=None):
         return self._fresh(services.retry_failed(self.get_object()))
+
+    @action(detail=True, methods=["post"])
+    def pause(self, request, pk=None):
+        return self._fresh(services.pause_run(self.get_object()))
+
+    @action(detail=True, methods=["post"])
+    def resume(self, request, pk=None):
+        return self._fresh(services.resume_run(self.get_object()))
+
+    @action(detail=True, methods=["post"])
+    def rerun(self, request, pk=None):
+        return self._fresh(services.rerun(self.get_object()))
 
     @action(detail=True, methods=["get"])
     def sites(self, request, pk=None):

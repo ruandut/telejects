@@ -23,7 +23,7 @@ export function RealmSwitcher({ onNavigate }: { onNavigate: () => void }) {
   const label = (
     <>
       <Mark aria-hidden className="size-8 shrink-0 text-sidebar-primary" />
-      <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+      <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
         <span className="truncate font-semibold">{current?.name ?? "Telejects"}</span>
         <span className="truncate text-xs text-muted-foreground">
           {current?.role.name ?? "No company"}
@@ -36,7 +36,12 @@ export function RealmSwitcher({ onNavigate }: { onNavigate: () => void }) {
     return (
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton asChild size="lg" tooltip={current?.name ?? "Telejects"}>
+          <SidebarMenuButton
+            asChild
+            size="lg"
+            className="group-data-[collapsible=icon]:justify-center"
+            tooltip={current?.name ?? "Telejects"}
+          >
             <Link to="/" onClick={onNavigate}>
               {label}
             </Link>
@@ -51,9 +56,13 @@ export function RealmSwitcher({ onNavigate }: { onNavigate: () => void }) {
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton size="lg" tooltip={current?.name ?? "Switch company"}>
+            <SidebarMenuButton
+              size="lg"
+              className="group-data-[collapsible=icon]:justify-center"
+              tooltip={current?.name ?? "Switch company"}
+            >
               {label}
-              <ChevronsUpDown className="ml-auto size-4" />
+              <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="bottom" align="start" className="w-64">

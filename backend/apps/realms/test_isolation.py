@@ -59,6 +59,13 @@ COMPANY_ROUTES = [
     "/api/api-clients/",
     "/api/connect-product/",
     "/api/product/",
+    "/api/projects/",
+    "/api/boards/templates/",
+    "/api/automations/recipes/",
+    "/api/analytics/dashboards/",
+    "/api/analytics/portfolio/",
+    "/api/analytics/sources/",
+    "/api/notifications/",
 ]
 
 
@@ -265,6 +272,18 @@ def test_roles_are_read_only(api, realm):
         "/api/connect-product/1/",
         "/api/product/",
         "/api/product/1/",
+        "/api/projects/",
+        "/api/projects/1/",
+        "/api/projects/1/members/",
+        "/api/projects/access/",
+        "/api/boards/1/",
+        "/api/boards/1/items/",
+        "/api/boards/items/1/",
+        "/api/automations/",
+        "/api/presence/",
+        "/api/analytics/portfolio/",
+        "/api/analytics/widgets/1/data/",
+        "/api/notifications/",
     ],
 )
 def test_signed_out_requests_are_refused(db, path):
@@ -285,6 +304,10 @@ NOT_REALM_GATED = {
     "tells the token's holder only the company name and their own address",
     "oauth_token": "an API client's id and secret for a token, before there is a user; the "
     "token then names the client's company alone (0006)",
+    "api_docs": "the public API docs page; describes the endpoints API clients can call and "
+    "holds no company data",
+    "api_docs_schema": "the OpenAPI schema behind the docs page; endpoint shapes only, no "
+    "company data",
 }
 
 # Models that aren't rows inside a company, each with the reason.
@@ -319,6 +342,14 @@ ACROSS_REALMS_CALLS = {
     "that its connections changed (ids only); the socket then checks each subscriber (0004)",
     "api_clients/querysets.py::ApiClientQuerySet.for_token": "an API client's token is the only "
     "thing naming its company; the request then works in that company alone (0006)",
+    "presence/services.py::sweep": "the minutely sweep removes every company's quiet tabs and "
+    "tells each board (ids only); the socket then checks each subscriber (0007)",
+    "automations/services.py::due_timers": "the minutely tick finds every company's timer "
+    "automations; each then runs inside its own company (0007)",
+    "automations/services.py::due_waiting": "the minutely tick finds every company's waiting "
+    "actions by (company, id); each then runs inside its own company (0007)",
+    "automations/services.py::run_timer": "loads one timer automation by the id due_timers "
+    "found, to learn its company; everything after is in_realm_id of it (0007)",
 }
 
 
@@ -478,7 +509,8 @@ def test_at_0003_25_another_companys_runs_stay_out_of_sight(api, realm, blue_fea
     from apps.feasibilities.models import FeasibilityRun
 
     run_id = blue_feasibility["run_id"]
-    before = FeasibilityRun.objects.in_realm(blue_feasibility["realm"]).get(pk=run_id).status
+    theirs = FeasibilityRun.objects.in_realm(blue_feasibility["realm"])
+    before = theirs.values("status", "name").get(pk=run_id)
     assert api.get("/api/feasibilities/runs/").json() == []
     path = f"/api/feasibilities/runs/{run_id}/"
     attempts = [
@@ -490,14 +522,16 @@ def test_at_0003_25_another_companys_runs_stay_out_of_sight(api, realm, blue_fea
         api.get(f"{path}export/"),
         api.post(f"{path}cancel/"),
         api.post(f"{path}retry-failed/"),
+        api.post(f"{path}rerun/"),
+        api.post(f"{path}pause/"),
+        api.post(f"{path}resume/"),
         api.patch(path, {"name": "x"}, format="json"),
+        api.put(path, {"name": "x"}, format="json"),
         api.delete(path),
     ]
-    assert [r.status_code for r in attempts] == [404] * 8 + [405, 405]
+    assert [r.status_code for r in attempts] == [404] * 12 + [405, 405]
     assert "Blue Depot" not in "".join(r.content.decode() for r in attempts)
-    assert (
-        FeasibilityRun.objects.in_realm(blue_feasibility["realm"]).get(pk=run_id).status == before
-    )
+    assert theirs.values("status", "name").get(pk=run_id) == before
 
 
 def test_at_0003_26_a_run_cant_use_another_companys_products(
@@ -923,3 +957,439 @@ def test_at_0006_17_non_members_and_permission_limits_on_rapids_endpoints(realm,
     PriceBookGrant.objects.create(realm=blue_machine["realm"], book=book)
     assert pm.get("/api/connect-product/").status_code == 403
     assert blue_machine["machine"].get("/api/connect-product/").status_code == 200
+
+
+# --- projects, boards, automations, presence and insights (0007) --------------------------------
+
+
+@pytest.fixture
+def blue_project(blue):
+    """Blue Mast's own rollout: a board with an item, an update, an automation and a dashboard."""
+    from apps.projects.test_projects import first_board, new_project
+
+    owner = client_for(blue["owner"].user, blue["realm"])
+    project = new_project(owner, "Blue rollout")
+    board = first_board(owner, project["id"])
+    item = owner.post(
+        f"/api/boards/{board['id']}/items/",
+        {"name": "Blue secret site", "values": {"status": "Live", "fee": "999"}},
+        format="json",
+    ).json()
+    owner.post(f"/api/boards/items/{item['id']}/updates/", {"body": "Blue only"}, format="json")
+    automations = owner.get("/api/automations/", {"board": board["id"]}).json()
+    dashboard = owner.post(
+        "/api/analytics/dashboards/",
+        {"project": project["id"], "name": "Blue dash", "starter": True},
+        format="json",
+    ).json()
+    return {
+        **blue,
+        "client": owner,
+        "project": project,
+        "board": board,
+        "item": item,
+        "automation": automations[0],
+        "dashboard": dashboard,
+    }
+
+
+def _blue_state(bp):
+    from apps.automations.models import Automation
+    from apps.boards.models import Board, Column, Group, Item
+    from apps.projects.models import Project, ProjectMember
+
+    realm = bp["realm"]
+    item = Item.objects.in_realm(realm).get(pk=bp["item"]["id"])
+    return (
+        Project.objects.in_realm(realm).values_list("name", "status").get(pk=bp["project"]["id"]),
+        Board.objects.in_realm(realm).values_list("name", flat=True).get(pk=bp["board"]["id"]),
+        (item.name, item.values, item.group_id, item.archived_at),
+        sorted(Group.objects.in_realm(realm).values_list("name", flat=True)),
+        sorted(Column.objects.in_realm(realm).values_list("title", flat=True)),
+        sorted(Automation.objects.in_realm(realm).values_list("name", "enabled")),
+        ProjectMember.objects.in_realm(realm).count(),
+    )
+
+
+def test_at_0007_32_another_companys_projects_stay_out_of_lists_and_totals(
+    api, realm, blue_project
+):
+    from apps.projects.test_projects import new_project
+
+    new_project(api, "Mine")
+    body = str(
+        [
+            api.get("/api/projects/").json(),
+            api.get("/api/projects/", {"archived": "1", "search": "Blue"}).json(),
+            api.get("/api/analytics/portfolio/").json(),
+            api.get("/api/analytics/sources/").json(),
+            api.get("/api/analytics/dashboards/").json(),
+            api.post(
+                "/api/analytics/preview/",
+                {"config": {"group_by": {"by": "project"}}},
+                format="json",
+            ).json(),
+            api.get("/api/notifications/").json(),
+        ]
+    )
+    assert "Blue" not in body and "999" not in body
+    portfolio = api.get("/api/analytics/portfolio/").json()
+    assert [p["name"] for p in portfolio["projects"]] == ["Mine"]
+
+
+def test_at_0007_32_another_companys_routes_are_404_and_unchanged(api, realm, blue_project):
+    bp = blue_project
+    before = _blue_state(bp)
+    project, board, item = bp["project"]["id"], bp["board"]["id"], bp["item"]["id"]
+    group, column = bp["board"]["groups"][0]["id"], bp["board"]["columns"][0]["id"]
+    view, rule = bp["board"]["views"][0]["id"], bp["automation"]["id"]
+    dashboard, widget = bp["dashboard"]["id"], bp["dashboard"]["widgets"][0]["id"]
+    get = [
+        f"/api/projects/{project}/",
+        f"/api/projects/{project}/members/",
+        f"/api/projects/{project}/people/",
+        f"/api/projects/{project}/candidates/",
+        f"/api/boards/{board}/",
+        f"/api/boards/{board}/items/",
+        f"/api/boards/{board}/activity/",
+        f"/api/boards/items/{item}/",
+        f"/api/boards/items/{item}/updates/",
+        f"/api/boards/items/{item}/activity/",
+        f"/api/automations/{rule}/",
+        f"/api/automations/{rule}/runs/",
+        f"/api/analytics/dashboards/{dashboard}/",
+        f"/api/analytics/widgets/{widget}/data/",
+    ]
+    get_query = [
+        ("/api/boards/", {"project": project}),
+        ("/api/automations/", {"board": board}),
+        ("/api/presence/", {"board": board}),
+        ("/api/analytics/dashboards/", {"project": project}),
+        ("/api/analytics/sources/", {"project": project}),
+        ("/api/boards/items/search/", {"board": board}),
+    ]
+    for path in get:
+        assert api.get(path).status_code == 404, path
+    for path, params in get_query:
+        assert api.get(path, params).status_code == 404, path
+    change = {"name": "Hacked", "enabled": False, "title": "Hacked"}
+    for path in [
+        f"/api/projects/{project}/",
+        f"/api/boards/{board}/",
+        f"/api/boards/groups/{group}/",
+        f"/api/boards/columns/{column}/",
+        f"/api/boards/views/{view}/",
+        f"/api/boards/items/{item}/",
+        f"/api/automations/{rule}/",
+        f"/api/analytics/dashboards/{dashboard}/",
+        f"/api/analytics/widgets/{widget}/",
+    ]:
+        assert api.patch(path, change, format="json").status_code == 404, path
+        assert api.delete(path).status_code == 404, path
+    for path, data in [
+        (f"/api/boards/items/{item}/values/", {"status": "stuck"}),
+    ]:
+        assert api.patch(path, data, format="json").status_code == 404
+    for path, data in [
+        (f"/api/projects/{project}/members/", {"membership": bp["lerato"].id, "level": "view"}),
+        (f"/api/boards/{board}/items/", {"name": "Planted"}),
+        (f"/api/boards/{board}/import/", {"rows": [{"name": "Planted"}]}),
+        (f"/api/boards/{board}/batch/", {"items": [item], "action": "delete"}),
+        (f"/api/boards/items/{item}/archive/", {}),
+        (f"/api/boards/items/{item}/duplicate/", {}),
+        (f"/api/boards/items/{item}/updates/", {"body": "Planted"}),
+        ("/api/boards/groups/", {"board": board, "name": "Planted"}),
+        ("/api/boards/columns/", {"board": board, "title": "Planted", "type": "text"}),
+        ("/api/boards/views/", {"board": board, "name": "Planted"}),
+        (
+            "/api/automations/",
+            {
+                "board": board,
+                "name": "Planted",
+                "trigger": {"type": "item_created"},
+                "actions": [{"type": "archive_item"}],
+            },
+        ),
+        ("/api/presence/", {"board": board, "tab": "tab-1"}),
+        (
+            "/api/analytics/widgets/",
+            {"dashboard": dashboard, "title": "x", "kind": "bar", "config": {}},
+        ),
+        ("/api/analytics/preview/", {"project": project, "config": {}}),
+        ("/api/analytics/dashboards/", {"project": project, "name": "Planted"}),
+    ]:
+        assert api.post(path, data, format="json").status_code == 404, path
+    assert _blue_state(bp) == before
+    foreign = api.get(f"/api/boards/{board}/")
+    missing = api.get("/api/boards/999999/")
+    assert (foreign.status_code, foreign.json()) == (missing.status_code, missing.json())
+
+
+def test_at_0007_32_nothing_can_point_into_another_company(api, realm, blue_project):
+    from apps.boards.test_boards import add
+    from apps.projects.test_projects import first_board, new_project
+
+    bp = blue_project
+    mine = new_project(api, "Mine")
+    board = first_board(api, mine["id"])
+    item = add(api, board)
+    lerato = bp["lerato"].id
+    # A person from another company: not in a people column, not shared, not an owner.
+    assert (
+        api.patch(
+            f"/api/boards/items/{item['id']}/values/", {"assignee": [lerato]}, format="json"
+        ).status_code
+        == 400
+    )
+    assert (
+        api.post(
+            f"/api/projects/{mine['id']}/members/",
+            {"membership": lerato, "level": "view"},
+            format="json",
+        ).status_code
+        == 400
+    )
+    assert (
+        api.patch(f"/api/projects/{mine['id']}/", {"owner": lerato}, format="json").status_code
+        == 400
+    )
+    assert (
+        api.post(
+            "/api/projects/access/",
+            {"membership": lerato, "project": mine["id"], "level": "view"},
+            format="json",
+        ).status_code
+        == 400
+    )
+    assert (
+        api.post(
+            "/api/projects/access/",
+            {
+                "membership": RealmMembership.objects.in_realm(realm).first().id,
+                "project": bp["project"]["id"],
+                "level": "view",
+            },
+            format="json",
+        ).status_code
+        == 400
+    )
+    # A connect column, a moved item, a mention and an automation can't reach their board.
+    assert api.post(
+        "/api/boards/columns/",
+        {
+            "board": board["id"],
+            "title": "Link",
+            "type": "connect",
+            "settings": {"board": bp["board"]["id"]},
+        },
+        format="json",
+    ).status_code in (400, 404)
+    assert (
+        api.patch(
+            f"/api/boards/items/{item['id']}/",
+            {"group": bp["board"]["groups"][0]["id"]},
+            format="json",
+        ).status_code
+        == 400
+    )
+    res = api.post(
+        f"/api/boards/items/{item['id']}/updates/",
+        {"body": "hi", "mentions": [lerato]},
+        format="json",
+    )
+    assert res.json()["mentions"] == []
+    assert (
+        api.post(
+            "/api/automations/",
+            {
+                "board": board["id"],
+                "name": "x",
+                "trigger": {"type": "item_created"},
+                "actions": [{"type": "create_item", "board": bp["board"]["id"]}],
+            },
+            format="json",
+        ).status_code
+        == 400
+    )
+    assert (
+        api.post(
+            "/api/automations/",
+            {
+                "board": board["id"],
+                "name": "x",
+                "trigger": {"type": "item_created"},
+                "actions": [{"type": "notify", "members": [lerato]}],
+            },
+            format="json",
+        ).status_code
+        == 400
+    )
+    dashboard = api.post(
+        "/api/analytics/dashboards/", {"project": mine["id"], "name": "d"}, format="json"
+    ).json()
+    assert (
+        api.post(
+            "/api/analytics/widgets/",
+            {
+                "dashboard": dashboard["id"],
+                "title": "x",
+                "kind": "bar",
+                "config": {"boards": [bp["board"]["id"]]},
+            },
+            format="json",
+        ).status_code
+        == 400
+    )
+    from apps.notifications.models import Notification
+
+    assert not Notification.objects.in_realm(bp["realm"]).filter(title__icontains="hi").exists()
+
+
+def test_at_0007_32_non_members_and_permission_limits_on_projects(realm, blue_project):
+    from apps.projects.test_projects import first_board, new_project
+
+    outsider = client_for(blue_project["owner"].user, realm)
+    for path in ("/api/projects/", "/api/analytics/portfolio/", "/api/notifications/"):
+        res = outsider.get(path)
+        assert res.status_code == 403 and res.json()["code"] == "not_member"
+    # A guest (a Viewer here) sees only the projects granted to them: the sixth check.
+    owner = client_for(RealmMembership.objects.in_realm(realm).get().user, realm)
+    granted, other = new_project(owner, "Granted"), new_project(owner, "Other")
+    guest = member(realm, "guest@example.com", "viewer")
+    owner.post(
+        f"/api/projects/{granted['id']}/members/",
+        {"membership": guest.id, "level": "view"},
+        format="json",
+    )
+    theirs = client_for(guest.user, realm)
+    assert [p["name"] for p in theirs.get("/api/projects/").json()] == ["Granted"]
+    other_board = first_board(owner, other["id"])
+    assert theirs.get(f"/api/boards/{other_board['id']}/").status_code == 404
+    assert theirs.get("/api/presence/", {"board": other_board["id"]}).status_code == 404
+    assert theirs.get("/api/analytics/sources/").json()[0]["project"]["name"] == "Granted"
+    # Someone whose role lacks Projects sees none at all, even one shared with them.
+    from apps.realms import access_control
+
+    viewer = access_control.SYSTEM_ROLES["viewer"]
+    without = access_control.SystemRole(viewer.name, viewer.description, frozenset())
+    import unittest.mock
+
+    with unittest.mock.patch.dict(access_control.SYSTEM_ROLES, {"viewer": without}):
+        assert theirs.get("/api/projects/").status_code == 403
+        assert (
+            theirs.get(f"/api/boards/{first_board(owner, granted['id'])['id']}/").status_code == 403
+        )
+
+
+def _two_companies_with_boards():
+    """(me, my realm, my board, my item, guest user, their realm, their board)."""
+    from apps.projects.test_projects import first_board, new_project
+    from apps.realms.services import add_member
+    from conftest import make_user
+
+    me = make_user("tester@example.com")
+    mine = create_realm("Northwind Fibre")
+    add_member(mine, me, ADMIN, name="Tess Tester")
+    owner = make_user("owner@example.com")
+    theirs = create_realm("Blue Mast Telecom")
+    add_member(theirs, owner, ADMIN)
+    api = client_for(me, mine)
+    board = first_board(api, new_project(api, "Mine")["id"])
+    item = api.post(f"/api/boards/{board['id']}/items/", {"name": "Site A"}, format="json").json()
+    guest = member(mine, "guest@example.com", "viewer", name="Gus Guest")
+    their_board = first_board(
+        client_for(owner, theirs), new_project(client_for(owner, theirs), "Theirs")["id"]
+    )
+    return me, mine, board["id"], item["id"], guest.user, theirs, their_board["id"]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_at_0007_09_a_change_reaches_everyone_on_the_board(fast_socket):
+    from asgiref.sync import sync_to_async
+
+    me, mine, board, item, guest, theirs, their_board = await sync_to_async(
+        _two_companies_with_boards
+    )()
+    lerato = await sync_to_async(member)(mine, "lerato@example.com", "project_manager")
+    socket, ready = await _live(lerato.user, mine.id)
+    assert json.loads(ready["text"])["type"] == "ready"
+    assert (await _subscribe(socket, "board", board))["type"] == "subscribed"
+    # Another company's board, and a board in a project she can't open, are refused.
+    assert (await _subscribe(socket, "board", their_board))["type"] == "refused"
+    guest_socket, _ = await _live(guest, mine.id)
+    assert (await _subscribe(guest_socket, "board", board))["type"] == "refused"
+    await guest_socket.disconnect()
+
+    res = await sync_to_async(
+        lambda: client_for(me, mine).patch(
+            f"/api/boards/items/{item}/values/", {"status": "Stuck"}, format="json"
+        )
+    )()
+    assert res.status_code == 200
+    await _event(mine.id, "board", board, [item])
+    message = await socket.receive_json_from(timeout=2)
+    assert message["type"] == "data"
+    assert [(i["id"], i["values"]["status"]) for i in message["data"]["items"]] == [(item, "stuck")]
+    await sync_to_async(lambda: client_for(me, mine).delete(f"/api/boards/items/{item}/"))()
+    await _event(mine.id, "board", board, [item])
+    message = await socket.receive_json_from(timeout=2)
+    assert message["data"] == {"items": [], "removed": [item]}
+    # Structure changes just say "changed".
+    await _event(mine.id, "board", board)
+    assert (await socket.receive_json_from(timeout=2))["type"] == "changed"
+    await socket.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_at_0007_10_i_see_who_is_on_the_board_and_where(fast_socket):
+    from asgiref.sync import sync_to_async
+
+    me, mine, board, item, guest, theirs, their_board = await sync_to_async(
+        _two_companies_with_boards
+    )()
+    lerato = await sync_to_async(member)(
+        mine, "lerato@example.com", "project_manager", name="Lerato Mokoena"
+    )
+    hers = client_for(lerato.user, mine)
+    mine_api = client_for(me, mine)
+    socket, _ = await _live(me, mine.id)
+    await _subscribe(socket, "board_presence", board)
+    res = await sync_to_async(
+        lambda: hers.post(
+            "/api/presence/",
+            {"board": board, "tab": "tab-abc1", "item": item, "column": "status"},
+            format="json",
+        )
+    )()
+    assert res.status_code == 200
+    await _event(mine.id, "board_presence", board, [])
+    message = await socket.receive_json_from(timeout=2)
+    assert message["data"]["people"] == [
+        {"id": lerato.id, "name": "Lerato Mokoena", "item": item, "column": "status"}
+    ]
+    listed = await sync_to_async(lambda: mine_api.get("/api/presence/", {"board": board}).json())()
+    assert [p["name"] for p in listed] == ["Lerato Mokoena"]
+    await sync_to_async(
+        lambda: hers.post(
+            "/api/presence/leave/", {"board": board, "tab": "tab-abc1"}, format="json"
+        )
+    )()
+    await _event(mine.id, "board_presence", board, [])
+    last = await socket.receive_json_from(timeout=2)
+    assert last.get("data", {}).get("people") == [], last
+    await socket.disconnect()
+
+
+def test_presence_goes_when_a_tab_goes_quiet(api, realm):
+    import datetime as dt
+
+    from apps.presence import services
+    from apps.presence.models import BoardPresence
+    from apps.projects.test_projects import first_board, new_project
+
+    board = first_board(api, new_project(api)["id"])
+    api.post("/api/presence/", {"board": board["id"], "tab": "tab-quiet"}, format="json")
+    assert len(api.get("/api/presence/", {"board": board["id"]}).json()) == 1
+    BoardPresence.objects.in_realm(realm).update(last_seen=dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
+    assert api.get("/api/presence/", {"board": board["id"]}).json() == []
+    assert services.sweep() == 1

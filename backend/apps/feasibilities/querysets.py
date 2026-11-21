@@ -12,7 +12,7 @@ class FeasibilityRunQuerySet(TenantQuerySet):
         return self.select_related("created_by").order_by("-created_at", "-id")
 
     def going(self):
-        return self.filter(status__in=["queued", "running"])
+        return self.filter(status__in=["queued", "running", "paused"])
 
 
 class RunSiteQuerySet(TenantQuerySet):

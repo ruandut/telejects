@@ -8,6 +8,7 @@ offered to the company.
 
 import logging
 
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -17,8 +18,10 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from apps.api_clients.authentication import ApiClientAuthentication
+from apps.api_clients.openapi import CLIENT_AUTH
 from apps.realms.permissions import HasRealmPermission, InRealm
 
+from . import openapi as docs
 from . import services
 from .models import CatalogueProduct, ConnectProduct, PriceBook
 from .serializers import SingleSiteFeasibilityQuoteSerializer, SingleSiteFeasibilitySerializer
@@ -52,6 +55,20 @@ class RapidPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
 
+    def get_paginated_response_schema(self, schema):
+        """For the docs, in OpenAPI 3.1 (DRF's uses 3.0's `nullable`)."""
+        link = {"type": ["string", "null"], "format": "uri"}
+        return {
+            "type": "object",
+            "required": ["count", "next", "previous", "results"],
+            "properties": {
+                "count": {"type": "integer", "example": 42},
+                "next": {**link, "example": None},
+                "previous": {**link, "example": None},
+                "results": schema,
+            },
+        }
+
 
 def _who(request) -> dict:
     client = getattr(request.user, "api_client", None)
@@ -65,6 +82,21 @@ def _failed(error: Exception):
     return ValidationError({"error": f"Failed to conduct feasibility: {error}"})
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="single_site_feasibility",
+        summary="Check feasibility at a place",
+        description="What each provider can deliver at the coordinates. With no `products`, every "
+        "product the company is connected for is checked. Waits for the providers, up to `timeout` "
+        "seconds (5 to 50, default 50); a provider that fails or doesn't answer in time is listed "
+        "in `exceptions`.\n\nNeeds the `feasibilities.run` permission.",
+        tags=["Feasibility"],
+        auth=CLIENT_AUTH,
+        request=SingleSiteFeasibilitySerializer,
+        responses={200: docs.SingleSiteResponse, 400: docs.FailedCheck, **docs.ERRORS},
+        examples=[*docs.SINGLE_SITE_REQUEST, *docs.example("single_site")],
+    )
+)
 class SingleSiteFeasibilityView(APIView):
     authentication_classes = AUTHENTICATION
     permission_classes = CHECK
@@ -92,6 +124,22 @@ class SingleSiteFeasibilityView(APIView):
         return Response(body)
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="single_site_feasibility_quote",
+        summary="Quote at a place",
+        description="Checks feasibility at the coordinates, then prices what is feasible from "
+        "Telejects' price book, grouped by connect product. With no `connect_products`, every one "
+        "offered is quoted. Prices are indications, not a formal quote.\n\nNeeds the "
+        "`feasibilities.run` and `feasibilities.quote` permissions, and the price book offered to "
+        "the company.",
+        tags=["Feasibility"],
+        auth=CLIENT_AUTH,
+        request=SingleSiteFeasibilityQuoteSerializer,
+        responses={200: docs.QuoteResponse, 400: docs.FailedCheck, **docs.ERRORS},
+        examples=[*docs.QUOTE_REQUEST, *docs.example("quote")],
+    )
+)
 class SingleSiteFeasibilityQuoteView(APIView):
     authentication_classes = AUTHENTICATION
     permission_classes = QUOTE
@@ -120,6 +168,24 @@ class SingleSiteFeasibilityQuoteView(APIView):
         return Response(body)
 
 
+@extend_schema_view(
+    list=extend_schema(
+        operation_id="connect_product_list",
+        summary="List connect products",
+        description="What a quote can be asked for, 20 a page. Needs `feasibilities.quote`.",
+        parameters=[docs.SEARCH],
+        responses={200: docs.ConnectProductData(many=True), **docs.ERRORS},
+        examples=docs.page_example("connect_products"),
+    ),
+    retrieve=extend_schema(
+        operation_id="connect_product_retrieve",
+        summary="Get a connect product",
+        description="Needs `feasibilities.quote`.",
+        parameters=[docs.ID],
+        responses={200: docs.ConnectProductData, 404: docs.Detail, **docs.ERRORS},
+    ),
+)
+@extend_schema(tags=["Price book"], auth=CLIENT_AUTH)
 class ConnectProductViewSet(viewsets.ReadOnlyModelViewSet):
     """Rapid's `/api/connect-product/`: what a quote can be asked for."""
 
@@ -144,6 +210,24 @@ class ConnectProductViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(services.connect_product_data(self.get_object()))
 
 
+@extend_schema_view(
+    list=extend_schema(
+        operation_id="product_list",
+        summary="List provider products",
+        description="The products a feasibility check can name, 20 a page. Needs "
+        "`feasibilities.run`.",
+        parameters=[docs.SEARCH, docs.PROVIDER],
+        responses={200: docs.CatalogueProductData(many=True), **docs.ERRORS},
+    ),
+    retrieve=extend_schema(
+        operation_id="product_retrieve",
+        summary="Get a provider product",
+        description="Needs `feasibilities.run`.",
+        parameters=[docs.ID],
+        responses={200: docs.CatalogueProductData, 404: docs.Detail, **docs.ERRORS},
+    ),
+)
+@extend_schema(tags=["Price book"], auth=CLIENT_AUTH)
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     """Rapid's `/api/product/`: the provider products a single-site check can name."""
 

@@ -22,6 +22,10 @@ PERMISSIONS: dict[str, str] = {
     "feasibilities.run": "Start, cancel and retry feasibility runs, and check single sites",
     "feasibilities.quote": "Price feasible connections from Telejects' price book",
     "api_clients.manage": "Create and revoke the company's API clients",
+    "projects.view": "Use Projects: see the projects shared with you and work on them as each "
+    "project allows",
+    "projects.manage": "Create, archive and delete projects, choose who works on each, and open "
+    "and change every project",
 }
 
 ADMIN = "admin"
@@ -38,8 +42,8 @@ SYSTEM_ROLES: dict[str, SystemRole] = {
     ADMIN: SystemRole("Admin", "Runs the company's account. Can do everything."),
     "project_manager": SystemRole(
         "Project manager",
-        "Plans and runs projects. Can see the company's users and integrations, and run "
-        "feasibilities.",
+        "Plans and runs projects: creates them, shares them and works on every one. Can see "
+        "the company's users and integrations, and run feasibilities.",
         frozenset(
             {
                 "users.view",
@@ -48,10 +52,16 @@ SYSTEM_ROLES: dict[str, SystemRole] = {
                 "feasibilities.view",
                 "feasibilities.run",
                 "feasibilities.quote",
+                "projects.view",
+                "projects.manage",
             }
         ),
     ),
-    "viewer": SystemRole("Viewer", "Read-only access.", frozenset({"feasibilities.view"})),
+    "viewer": SystemRole(
+        "Viewer",
+        "Read-only access, and the projects shared with them.",
+        frozenset({"feasibilities.view", "projects.view"}),
+    ),
 }
 
 

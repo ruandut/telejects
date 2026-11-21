@@ -25,6 +25,9 @@ CLAUDE.md applies too.
 - Every screen works in light and dark mode. Use the theme tokens in `src/index.css` (`primary`,
   `muted`, `brand-accent`, ...), not hard-coded colours. The palette is a placeholder until the
   brand is decided; changing it should only touch `index.css`, the favicon and `wordmark.tsx`.
+- Never use the browser's own dialogs (`window.alert`, `confirm`, `prompt`). Ask with the app's
+  shadcn dialogs: `ConfirmDialog` before anything that can't be undone, `NameDialog` to ask for
+  a name, or a `Dialog` of the feature's own. The `no-alert` lint rule enforces it.
 - Build for phone width too. Pages must not scroll sideways.
 - Figures use `tabular-nums`.
 

@@ -13,8 +13,10 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppDevelopersRouteRouteImport } from './routes/_app/developers/route'
 import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
 import { Route as AppDevelopersIndexRouteImport } from './routes/_app/developers/index'
+import { Route as AppDevelopersCredentialsRouteImport } from './routes/_app/developers/credentials'
 import { Route as AppFeasibilitiesIndexRouteImport } from './routes/_app/feasibilities/index'
 import { Route as AppFeasibilitiesRunIdRouteImport } from './routes/_app/feasibilities/$runId'
 import { Route as AppFeasibilitiesNewRouteImport } from './routes/_app/feasibilities/new'
@@ -22,7 +24,14 @@ import { Route as AppIntegrationsIndexRouteImport } from './routes/_app/integrat
 import { Route as AppIntegrationsConnectionIdRouteImport } from './routes/_app/integrations/$connectionId'
 import { Route as AppLogsIndexRouteImport } from './routes/_app/logs/index'
 import { Route as AppLogsLogIdRouteImport } from './routes/_app/logs/$logId'
+import { Route as AppPortfolioIndexRouteImport } from './routes/_app/portfolio/index'
+import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
+import { Route as AppProjectsProjectIdRouteRouteImport } from './routes/_app/projects/$projectId/route'
 import { Route as AppUsersIndexRouteImport } from './routes/_app/users/index'
+import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
+import { Route as AppProjectsProjectIdAccessRouteImport } from './routes/_app/projects/$projectId/access'
+import { Route as AppProjectsProjectIdInsightsRouteImport } from './routes/_app/projects/$projectId/insights'
+import { Route as AppProjectsProjectIdBoardsBoardIdRouteImport } from './routes/_app/projects/$projectId/boards/$boardId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -43,16 +52,27 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDevelopersRouteRoute = AppDevelopersRouteRouteImport.update({
+  id: '/developers',
+  path: '/developers',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
   id: '/account/',
   path: '/account/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDevelopersIndexRoute = AppDevelopersIndexRouteImport.update({
-  id: '/developers/',
-  path: '/developers/',
-  getParentRoute: () => AppRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppDevelopersRouteRoute,
 } as any)
+const AppDevelopersCredentialsRoute =
+  AppDevelopersCredentialsRouteImport.update({
+    id: '/credentials',
+    path: '/credentials',
+    getParentRoute: () => AppDevelopersRouteRoute,
+  } as any)
 const AppFeasibilitiesIndexRoute = AppFeasibilitiesIndexRouteImport.update({
   id: '/feasibilities/',
   path: '/feasibilities/',
@@ -89,16 +109,59 @@ const AppLogsLogIdRoute = AppLogsLogIdRouteImport.update({
   path: '/logs/$logId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPortfolioIndexRoute = AppPortfolioIndexRouteImport.update({
+  id: '/portfolio/',
+  path: '/portfolio/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
+  id: '/projects/',
+  path: '/projects/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsProjectIdRouteRoute =
+  AppProjectsProjectIdRouteRouteImport.update({
+    id: '/projects/$projectId',
+    path: '/projects/$projectId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppUsersIndexRoute = AppUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProjectsProjectIdIndexRoute =
+  AppProjectsProjectIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+  } as any)
+const AppProjectsProjectIdAccessRoute =
+  AppProjectsProjectIdAccessRouteImport.update({
+    id: '/access',
+    path: '/access',
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+  } as any)
+const AppProjectsProjectIdInsightsRoute =
+  AppProjectsProjectIdInsightsRouteImport.update({
+    id: '/insights',
+    path: '/insights',
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+  } as any)
+const AppProjectsProjectIdBoardsBoardIdRoute =
+  AppProjectsProjectIdBoardsBoardIdRouteImport.update({
+    id: '/boards/$boardId',
+    path: '/boards/$boardId',
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
+  '/developers': typeof AppDevelopersRouteRouteWithChildren
+  '/projects/$projectId': typeof AppProjectsProjectIdRouteRouteWithChildren
+  '/developers/credentials': typeof AppDevelopersCredentialsRoute
   '/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
   '/feasibilities/new': typeof AppFeasibilitiesNewRoute
   '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
@@ -108,12 +171,19 @@ export interface FileRoutesByFullPath {
   '/feasibilities/': typeof AppFeasibilitiesIndexRoute
   '/integrations/': typeof AppIntegrationsIndexRoute
   '/logs/': typeof AppLogsIndexRoute
+  '/portfolio/': typeof AppPortfolioIndexRoute
+  '/projects/': typeof AppProjectsIndexRoute
   '/users/': typeof AppUsersIndexRoute
+  '/projects/$projectId/access': typeof AppProjectsProjectIdAccessRoute
+  '/projects/$projectId/insights': typeof AppProjectsProjectIdInsightsRoute
+  '/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
+  '/projects/$projectId/boards/$boardId': typeof AppProjectsProjectIdBoardsBoardIdRoute
 }
 export interface FileRoutesByTo {
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
+  '/developers/credentials': typeof AppDevelopersCredentialsRoute
   '/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
   '/feasibilities/new': typeof AppFeasibilitiesNewRoute
   '/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
@@ -123,14 +193,23 @@ export interface FileRoutesByTo {
   '/feasibilities': typeof AppFeasibilitiesIndexRoute
   '/integrations': typeof AppIntegrationsIndexRoute
   '/logs': typeof AppLogsIndexRoute
+  '/portfolio': typeof AppPortfolioIndexRoute
+  '/projects': typeof AppProjectsIndexRoute
   '/users': typeof AppUsersIndexRoute
+  '/projects/$projectId/access': typeof AppProjectsProjectIdAccessRoute
+  '/projects/$projectId/insights': typeof AppProjectsProjectIdInsightsRoute
+  '/projects/$projectId': typeof AppProjectsProjectIdIndexRoute
+  '/projects/$projectId/boards/$boardId': typeof AppProjectsProjectIdBoardsBoardIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
+  '/_app/developers': typeof AppDevelopersRouteRouteWithChildren
   '/_app/': typeof AppIndexRoute
+  '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteRouteWithChildren
+  '/_app/developers/credentials': typeof AppDevelopersCredentialsRoute
   '/_app/feasibilities/$runId': typeof AppFeasibilitiesRunIdRoute
   '/_app/feasibilities/new': typeof AppFeasibilitiesNewRoute
   '/_app/integrations/$connectionId': typeof AppIntegrationsConnectionIdRoute
@@ -140,7 +219,13 @@ export interface FileRoutesById {
   '/_app/feasibilities/': typeof AppFeasibilitiesIndexRoute
   '/_app/integrations/': typeof AppIntegrationsIndexRoute
   '/_app/logs/': typeof AppLogsIndexRoute
+  '/_app/portfolio/': typeof AppPortfolioIndexRoute
+  '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/users/': typeof AppUsersIndexRoute
+  '/_app/projects/$projectId/access': typeof AppProjectsProjectIdAccessRoute
+  '/_app/projects/$projectId/insights': typeof AppProjectsProjectIdInsightsRoute
+  '/_app/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
+  '/_app/projects/$projectId/boards/$boardId': typeof AppProjectsProjectIdBoardsBoardIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,6 +233,9 @@ export interface FileRouteTypes {
     | '/'
     | '/accept-invite'
     | '/login'
+    | '/developers'
+    | '/projects/$projectId'
+    | '/developers/credentials'
     | '/feasibilities/$runId'
     | '/feasibilities/new'
     | '/integrations/$connectionId'
@@ -157,12 +245,19 @@ export interface FileRouteTypes {
     | '/feasibilities/'
     | '/integrations/'
     | '/logs/'
+    | '/portfolio/'
+    | '/projects/'
     | '/users/'
+    | '/projects/$projectId/access'
+    | '/projects/$projectId/insights'
+    | '/projects/$projectId/'
+    | '/projects/$projectId/boards/$boardId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/accept-invite'
     | '/login'
     | '/'
+    | '/developers/credentials'
     | '/feasibilities/$runId'
     | '/feasibilities/new'
     | '/integrations/$connectionId'
@@ -172,13 +267,22 @@ export interface FileRouteTypes {
     | '/feasibilities'
     | '/integrations'
     | '/logs'
+    | '/portfolio'
+    | '/projects'
     | '/users'
+    | '/projects/$projectId/access'
+    | '/projects/$projectId/insights'
+    | '/projects/$projectId'
+    | '/projects/$projectId/boards/$boardId'
   id:
     | '__root__'
     | '/_app'
     | '/accept-invite'
     | '/login'
+    | '/_app/developers'
     | '/_app/'
+    | '/_app/projects/$projectId'
+    | '/_app/developers/credentials'
     | '/_app/feasibilities/$runId'
     | '/_app/feasibilities/new'
     | '/_app/integrations/$connectionId'
@@ -188,7 +292,13 @@ export interface FileRouteTypes {
     | '/_app/feasibilities/'
     | '/_app/integrations/'
     | '/_app/logs/'
+    | '/_app/portfolio/'
+    | '/_app/projects/'
     | '/_app/users/'
+    | '/_app/projects/$projectId/access'
+    | '/_app/projects/$projectId/insights'
+    | '/_app/projects/$projectId/'
+    | '/_app/projects/$projectId/boards/$boardId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -227,6 +337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/developers': {
+      id: '/_app/developers'
+      path: '/developers'
+      fullPath: '/developers'
+      preLoaderRoute: typeof AppDevelopersRouteRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/account/': {
       id: '/_app/account/'
       path: '/account'
@@ -236,10 +353,17 @@ declare module '@tanstack/react-router' {
     }
     '/_app/developers/': {
       id: '/_app/developers/'
-      path: '/developers'
+      path: '/'
       fullPath: '/developers/'
       preLoaderRoute: typeof AppDevelopersIndexRouteImport
-      parentRoute: typeof AppRoute
+      parentRoute: typeof AppDevelopersRouteRoute
+    }
+    '/_app/developers/credentials': {
+      id: '/_app/developers/credentials'
+      path: '/credentials'
+      fullPath: '/developers/credentials'
+      preLoaderRoute: typeof AppDevelopersCredentialsRouteImport
+      parentRoute: typeof AppDevelopersRouteRoute
     }
     '/_app/feasibilities/': {
       id: '/_app/feasibilities/'
@@ -290,6 +414,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogsLogIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/portfolio/': {
+      id: '/_app/portfolio/'
+      path: '/portfolio'
+      fullPath: '/portfolio/'
+      preLoaderRoute: typeof AppPortfolioIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/': {
+      id: '/_app/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AppProjectsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$projectId': {
+      id: '/_app/projects/$projectId'
+      path: '/projects/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof AppProjectsProjectIdRouteRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/users/': {
       id: '/_app/users/'
       path: '/users'
@@ -297,34 +442,102 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUsersIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/projects/$projectId/': {
+      id: '/_app/projects/$projectId/'
+      path: '/'
+      fullPath: '/projects/$projectId/'
+      preLoaderRoute: typeof AppProjectsProjectIdIndexRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
+    }
+    '/_app/projects/$projectId/access': {
+      id: '/_app/projects/$projectId/access'
+      path: '/access'
+      fullPath: '/projects/$projectId/access'
+      preLoaderRoute: typeof AppProjectsProjectIdAccessRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
+    }
+    '/_app/projects/$projectId/insights': {
+      id: '/_app/projects/$projectId/insights'
+      path: '/insights'
+      fullPath: '/projects/$projectId/insights'
+      preLoaderRoute: typeof AppProjectsProjectIdInsightsRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
+    }
+    '/_app/projects/$projectId/boards/$boardId': {
+      id: '/_app/projects/$projectId/boards/$boardId'
+      path: '/boards/$boardId'
+      fullPath: '/projects/$projectId/boards/$boardId'
+      preLoaderRoute: typeof AppProjectsProjectIdBoardsBoardIdRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
+    }
   }
 }
 
+interface AppDevelopersRouteRouteChildren {
+  AppDevelopersCredentialsRoute: typeof AppDevelopersCredentialsRoute
+  AppDevelopersIndexRoute: typeof AppDevelopersIndexRoute
+}
+
+const AppDevelopersRouteRouteChildren: AppDevelopersRouteRouteChildren = {
+  AppDevelopersCredentialsRoute: AppDevelopersCredentialsRoute,
+  AppDevelopersIndexRoute: AppDevelopersIndexRoute,
+}
+
+const AppDevelopersRouteRouteWithChildren =
+  AppDevelopersRouteRoute._addFileChildren(AppDevelopersRouteRouteChildren)
+
+interface AppProjectsProjectIdRouteRouteChildren {
+  AppProjectsProjectIdAccessRoute: typeof AppProjectsProjectIdAccessRoute
+  AppProjectsProjectIdInsightsRoute: typeof AppProjectsProjectIdInsightsRoute
+  AppProjectsProjectIdIndexRoute: typeof AppProjectsProjectIdIndexRoute
+  AppProjectsProjectIdBoardsBoardIdRoute: typeof AppProjectsProjectIdBoardsBoardIdRoute
+}
+
+const AppProjectsProjectIdRouteRouteChildren: AppProjectsProjectIdRouteRouteChildren =
+  {
+    AppProjectsProjectIdAccessRoute: AppProjectsProjectIdAccessRoute,
+    AppProjectsProjectIdInsightsRoute: AppProjectsProjectIdInsightsRoute,
+    AppProjectsProjectIdIndexRoute: AppProjectsProjectIdIndexRoute,
+    AppProjectsProjectIdBoardsBoardIdRoute:
+      AppProjectsProjectIdBoardsBoardIdRoute,
+  }
+
+const AppProjectsProjectIdRouteRouteWithChildren =
+  AppProjectsProjectIdRouteRoute._addFileChildren(
+    AppProjectsProjectIdRouteRouteChildren,
+  )
+
 interface AppRouteChildren {
+  AppDevelopersRouteRoute: typeof AppDevelopersRouteRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
+  AppProjectsProjectIdRouteRoute: typeof AppProjectsProjectIdRouteRouteWithChildren
   AppFeasibilitiesRunIdRoute: typeof AppFeasibilitiesRunIdRoute
   AppFeasibilitiesNewRoute: typeof AppFeasibilitiesNewRoute
   AppIntegrationsConnectionIdRoute: typeof AppIntegrationsConnectionIdRoute
   AppLogsLogIdRoute: typeof AppLogsLogIdRoute
   AppAccountIndexRoute: typeof AppAccountIndexRoute
-  AppDevelopersIndexRoute: typeof AppDevelopersIndexRoute
   AppFeasibilitiesIndexRoute: typeof AppFeasibilitiesIndexRoute
   AppIntegrationsIndexRoute: typeof AppIntegrationsIndexRoute
   AppLogsIndexRoute: typeof AppLogsIndexRoute
+  AppPortfolioIndexRoute: typeof AppPortfolioIndexRoute
+  AppProjectsIndexRoute: typeof AppProjectsIndexRoute
   AppUsersIndexRoute: typeof AppUsersIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppDevelopersRouteRoute: AppDevelopersRouteRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
+  AppProjectsProjectIdRouteRoute: AppProjectsProjectIdRouteRouteWithChildren,
   AppFeasibilitiesRunIdRoute: AppFeasibilitiesRunIdRoute,
   AppFeasibilitiesNewRoute: AppFeasibilitiesNewRoute,
   AppIntegrationsConnectionIdRoute: AppIntegrationsConnectionIdRoute,
   AppLogsLogIdRoute: AppLogsLogIdRoute,
   AppAccountIndexRoute: AppAccountIndexRoute,
-  AppDevelopersIndexRoute: AppDevelopersIndexRoute,
   AppFeasibilitiesIndexRoute: AppFeasibilitiesIndexRoute,
   AppIntegrationsIndexRoute: AppIntegrationsIndexRoute,
   AppLogsIndexRoute: AppLogsIndexRoute,
+  AppPortfolioIndexRoute: AppPortfolioIndexRoute,
+  AppProjectsIndexRoute: AppProjectsIndexRoute,
   AppUsersIndexRoute: AppUsersIndexRoute,
 }
 

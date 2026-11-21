@@ -137,6 +137,10 @@ class SiteSerializer(RealmScopedSerializer):
         ]
 
 
+class RenameRunSerializer(RealmScopedInputSerializer):
+    name = serializers.CharField(max_length=100)
+
+
 class StartRunSerializer(RealmScopedInputSerializer):
     name = serializers.CharField(max_length=100)
     products = serializers.PrimaryKeyRelatedField(

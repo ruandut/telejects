@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Wordmark } from "@/components/wordmark";
+import { NotificationBell } from "@/features/notifications/bell";
 import { RealmGate } from "@/features/realms/realm-gate";
 import { isLoggedIn } from "@/stores/auth";
 
@@ -38,6 +39,7 @@ function AppLayout() {
             <Wordmark className="text-xs" />
           </Link>
           <div className="flex-1" />
+          {!personal && <NotificationBell />}
           <ThemeToggle />
         </header>
         {personal ? (

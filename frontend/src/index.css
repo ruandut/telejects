@@ -6,6 +6,18 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-label-grey: var(--label-grey);
+  --color-label-green: var(--label-green);
+  --color-label-amber: var(--label-amber);
+  --color-label-red: var(--label-red);
+  --color-label-blue: var(--label-blue);
+  --color-label-purple: var(--label-purple);
+  --color-label-pink: var(--label-pink);
+  --color-label-teal: var(--label-teal);
+  --color-label-orange: var(--label-orange);
+  --color-label-lime: var(--label-lime);
+  --color-label-indigo: var(--label-indigo);
+  --color-label-brown: var(--label-brown);
   --font-sans: "Geist Variable", sans-serif;
   --font-heading: "Geist Variable", sans-serif;
   --color-brand-accent: var(--brand-accent);
@@ -93,6 +105,19 @@
   --sidebar-accent-foreground: #1c2b40;
   --sidebar-border: #e0e4ea;
   --sidebar-ring: #3a6aa3;
+  /* Board label colours (status, groups, projects). Text on them is white in both themes. */
+  --label-grey: #8a94a3;
+  --label-green: #2f9e5b;
+  --label-amber: #d99a1e;
+  --label-red: #d64545;
+  --label-blue: #3a78c9;
+  --label-purple: #8256c9;
+  --label-pink: #d1508f;
+  --label-teal: #1f9a9a;
+  --label-orange: #e0702b;
+  --label-lime: #7fae2e;
+  --label-indigo: #4f5bd5;
+  --label-brown: #8d6748;
 }
 
 .dark {
@@ -129,6 +154,18 @@
   --sidebar-accent-foreground: #e9edf2;
   --sidebar-border: #ffffff1a;
   --sidebar-ring: #7aa7dc;
+  --label-grey: #6b7585;
+  --label-green: #3aa866;
+  --label-amber: #c98d1c;
+  --label-red: #d05050;
+  --label-blue: #4a86d4;
+  --label-purple: #9168d4;
+  --label-pink: #cf5e98;
+  --label-teal: #2aa3a3;
+  --label-orange: #c96f30;
+  --label-lime: #83ad3a;
+  --label-indigo: #6470dc;
+  --label-brown: #97735a;
 }
 
 @layer base {

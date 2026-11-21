@@ -121,9 +121,11 @@ def test_admin_always_has_every_permission(realm, monkeypatch):
                 "feasibilities.view",
                 "feasibilities.run",
                 "feasibilities.quote",
+                "projects.view",
+                "projects.manage",
             },
         ),
-        ("viewer", {"feasibilities.view"}),
+        ("viewer", {"feasibilities.view", "projects.view"}),
     ],
 )
 def test_built_in_role_permissions(realm, key, expected):

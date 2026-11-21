@@ -28,12 +28,22 @@ Specs so far:
   Held to Rapid's shapes by contract tests (`apps/pricebook/rapid_responses/`): don't change a
   field of those responses. One-site checks are `apps/site_checks`; API clients (OAuth2 client
   credentials through django-oauth-toolkit, secret hashed) are `apps/api_clients`.
+- **0007 Projects, boards, automations and insights**: monday.com-style work management. A
+  project (`apps/projects`) is shared per person at view, edit or manage level; its boards
+  (`apps/boards`) hold groups, typed columns and items, whose values are one JSON object per
+  item checked by the column-type registry (`apps/boards/column_types.py`, formulas in
+  `formula.py`). Automations (`apps/automations`, recipes in `recipes.py`) react to the boards'
+  signals and to a minutely Hatchet tick; `apps/notifications` is the bell, `apps/presence` who
+  is on a board, `apps/analytics` charts, dashboards and the portfolio. Everything is live over
+  the events socket. A board can start from a feasibility run (its sites become items) or from
+  a monday.com export or CSV (`apps/boards/file_import.py`).
 - **Next:** single-site feasibility from a map (reuses `site_checks`).
 - **Later: client API access, more of it.** A public, versioned API beyond the Rapid paths,
   feasibilities first, on the API clients from 0006; their permissions optionally limited to
   projects.
 - **Later: SSO and MFA** through django-allauth (OIDC and SAML), configured per company.
-- **Later: per-project guest access** (see Multi-tenancy).
+- **Later: guests from outside the company** on the per-project access from 0007 (see
+  Multi-tenancy).
 
 The [README](README.md) covers setup and commands; read it first. These are the rules that aren't
 obvious from the code. `backend/CLAUDE.md` and `frontend/CLAUDE.md` hold each side's rules.
@@ -112,6 +122,8 @@ companies is the worst bug this system can have.
   `request.membership` is a `ClientMembership` (the client's permissions, limited by its
   maker's), not a `RealmMembership`. A new client-facing endpoint adds its permission codes to
   `api_clients.services.CLIENT_PERMISSIONS` and gets isolation tests with a client token too.
+  Opting in also publishes it in the public API docs (`/api/docs/`, drf-spectacular): describe
+  its request and response with `extend_schema`, and add its path to `test_api_docs.py`.
 - **Every endpoint gets isolation tests in the same change**, in `apps/realms/test_isolation.py`:
   1. another company's rows stay out of lists, counts and aggregates;
   2. detail routes and custom actions on another company's rows return 404, for every method,
@@ -137,12 +149,14 @@ companies is the worst bug this system can have.
   from `.env`, never the database). A company
   never sees a platform account's settings or secrets, and only
   `integrations.services.credentials_of` decides whose credentials a call uses.
-- **Per-project access is coming** (board-based, like monday.com): a guest from outside, such as
-  a customer following their own project, sees only the projects granted to them. Belonging to
-  a realm will not mean seeing all its projects. Once projects exist, every project-owned query
-  chains `visible_to(membership)` after `in_realm`, and the isolation tests add a sixth check:
-  a guest sees only their granted projects. Don't write code that assumes a member sees
-  everything in the company.
+- **Per-project access (0007).** Belonging to a company does not mean seeing its projects:
+  `projects.manage` opens every project, anyone else only the projects shared with them
+  (`ProjectMember`, level view / edit / manage). Every project-owned query chains
+  `visible_to(membership)` after `in_realm` (boards, items, updates, automations, dashboards,
+  presence), and `apps/projects/access.py` alone decides the level: a hidden project is a 404,
+  like another company's; too low a level is a 403. Charts, mirrors and connect columns count
+  and show only what the viewer may see. The isolation tests have a sixth check: someone sees
+  only their granted projects. Guests from outside the company (later) use the same model.
 - An endpoint is not done until its isolation tests pass.
 
 ## Local ports

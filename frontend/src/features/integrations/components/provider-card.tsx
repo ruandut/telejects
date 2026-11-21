@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 
 import { useUpdateConnection } from "../api";
@@ -97,23 +98,22 @@ function ConnectionRow({
         </Button>
       )}
       {canManage && !platform && connection.can_use_platform && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="justify-self-start"
-          disabled={update.isPending}
-          onClick={() => {
-            if (
-              !window.confirm(
-                "Use Telejects' account instead? Your saved credentials for this provider will be deleted.",
-              )
-            )
-              return;
-            update.mutate({ credentials: "platform" });
-          }}
+        <ConfirmDialog
+          title="Use Telejects' account instead?"
+          description="Your saved credentials for this provider will be deleted."
+          confirmLabel="Use Telejects' account"
+          destructive
+          onConfirm={() => update.mutate({ credentials: "platform" })}
         >
-          Use Telejects' account
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-self-start"
+            disabled={update.isPending}
+          >
+            Use Telejects' account
+          </Button>
+        </ConfirmDialog>
       )}
     </div>
   );
